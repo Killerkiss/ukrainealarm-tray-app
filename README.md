@@ -1,10 +1,25 @@
 # Ukraine Alarm Tray
 
-A cross-platform desktop tray app for Ukrainian air-raid alerts (drones and missiles).
-Pick the oblasts and raions you care about and the tray icon tells you their status at a
-glance — red during an alert, green when clear. Hover for the details.
+A cross-platform desktop tray app for Ukrainian air-raid alerts. Pick the places you care
+about — down to your own raion or city — and the tray icon tells you their status at a glance:
+**red** for a declared air-raid alert, **amber** for a yellow-level threat, green when clear.
 
-![Settings window](docs/screenshot-settings.png)
+Merges up to three data sources, so an alert reaches you as soon as the first of them reports
+it, and names the actual threat — drones, ballistic or cruise missiles, guided bombs — not just
+"air raid".
+
+![Regions tab showing a red-level and a yellow-level alert side by side](docs/screenshot-main.png)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshot-sources.png" alt="Sources tab with live per-source health"></td>
+<td width="50%"><img src="docs/screenshot-yellow.png" alt="Yellow-level threat banner"></td>
+</tr>
+<tr>
+<td>Sources tab — enable several feeds at once and watch each one's health.</td>
+<td>A yellow-level threat reads differently from a declared raid.</td>
+</tr>
+</table>
 
 ## Features
 
