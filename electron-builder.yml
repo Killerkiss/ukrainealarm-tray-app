@@ -26,10 +26,30 @@ linux:
     - deb
   category: Utility
   icon: assets/icons/app
+  maintainer: Killerkiss <kaugorodov.ruslan@gmail.com>
   synopsis: Ukrainian air-raid alerts in your system tray
   description: >
     Tray application for Ukrainian air-raid (drone and missile) alerts with
     per-region selection, desktop notifications, sound and a colour-coded icon.
+  # electron-builder 25 takes a flat map here; the nested `entry:` form is
+  # from a later major and silently writes a literal "entry=[object Object]".
+  desktop:
+    StartupWMClass: Ukraine Alarm Tray
+    Keywords: alert;alarm;siren;ukraine;tryvoga;povitryana;
+  # Spaces in filenames make the install command awkward to type and to paste.
+  artifactName: ukrainealarm-tray-${version}-${arch}.${ext}
+
+deb:
+  # libnotify backs Electron's desktop notifications; the rest are the usual
+  # Chromium runtime libraries. Ubuntu ships all of them, but naming them means
+  # apt reports a clear error instead of the app failing to start.
+  depends:
+    - libnotify4
+    - libnss3
+    - libxtst6
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
 
 win:
   target:

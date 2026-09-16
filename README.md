@@ -24,14 +24,58 @@ glance — red during an alert, green when clear. Hover for the details.
 
 ## Install
 
-Grab a build from the [Releases](../../releases) page — `.AppImage` or `.deb` for Linux,
-`.exe` for Windows, `.dmg` for macOS. Or build it yourself:
+### Ubuntu / Debian (recommended)
+
+Download `ukrainealarm-tray-<version>-amd64.deb` from the
+[Releases](https://github.com/Killerkiss/ukrainealarm-tray-app/releases) page, then:
+
+```bash
+sudo apt install ./ukrainealarm-tray-0.1.0-amd64.deb
+```
+
+Use `apt install ./file.deb` rather than `dpkg -i` so that apt pulls in the dependencies.
+The app then appears in your application menu as **Ukraine Alarm Tray**.
+
+To update, install the newer `.deb` over the top. To remove it:
+
+```bash
+sudo apt remove ukrainealarm-tray-app
+```
+
+Your settings live in `~/.config/Ukraine Alarm Tray/settings.json` and are left behind on
+removal — delete that directory too for a clean uninstall.
+
+### AppImage (any Linux, no root)
+
+Useful for a machine where you would rather not install anything system-wide:
+
+```bash
+chmod +x ukrainealarm-tray-0.1.0-x86_64.AppImage
+./ukrainealarm-tray-0.1.0-x86_64.AppImage
+```
+
+The AppImage is self-contained, so it does not create a menu entry by itself. If you want
+one, [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) will add it.
+
+### If the tray icon does not appear
+
+GNOME has no built-in tray. Install the indicator extension once per machine:
+
+```bash
+sudo apt install gnome-shell-extension-appindicator
+```
+
+Then log out and back in, and enable *AppIndicator and KStatusNotifierItem Support* in the
+Extensions app. KDE, XFCE, Cinnamon and MATE need nothing extra.
+
+### Build it yourself
 
 ```bash
 git clone https://github.com/Killerkiss/ukrainealarm-tray-app.git
 cd ukrainealarm-tray-app
 npm install
-npm start
+npm start              # run from source
+npm run package:linux  # writes .deb and .AppImage into release/
 ```
 
 ## Data sources
