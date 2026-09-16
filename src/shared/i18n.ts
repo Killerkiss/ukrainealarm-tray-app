@@ -1,4 +1,4 @@
-import type { AlertType, Language } from './types';
+import type { AlertType, Language, ThreatType } from './types';
 
 /**
  * Small hand-rolled dictionary. The app is Ukrainian-first: `uk` is the default
@@ -50,6 +50,11 @@ const STRINGS = {
     sourceFreeHint: 'Без ключа. Рівень області та району.',
     sourceOfficial: 'api.ukrainealarm.com',
     sourceOfficialHint: 'Потрібен безкоштовний ключ. Типи загроз і точність до громади.',
+    sourceAlertsInUa: 'alerts.in.ua',
+    sourceAlertsInUaHint:
+      'Потрібен безкоштовний токен. Єдине джерело, що вказує саме тип загрози: дрони, балістика, крилаті ракети, КАБи.',
+    alertsOnly: 'Лише тривоги — не надає список регіонів. Тримайте увімкненим ще одне джерело.',
+    threats: 'Загрози',
     health: 'Стан джерел',
     healthOk: 'працює',
     healthFail: 'помилка',
@@ -103,6 +108,11 @@ const STRINGS = {
     sourceFreeHint: 'No key needed. Oblast and raion level.',
     sourceOfficial: 'api.ukrainealarm.com',
     sourceOfficialHint: 'Needs a free key. Threat types and hromada-level precision.',
+    sourceAlertsInUa: 'alerts.in.ua',
+    sourceAlertsInUaHint:
+      'Needs a free token. The only source that names the actual threat: drones, ballistic, cruise missiles, guided bombs.',
+    alertsOnly: 'Alerts only — publishes no region list. Keep another source enabled.',
+    threats: 'Threats',
     health: 'Source health',
     healthOk: 'working',
     healthFail: 'failed',
@@ -140,6 +150,43 @@ const ALERT_TYPE_LABELS: Record<Language, Record<AlertType, string>> = {
 
 export function alertTypeLabel(language: Language, type: AlertType): string {
   return ALERT_TYPE_LABELS[language][type];
+}
+
+const THREAT_LABELS: Record<Language, Record<ThreatType, string>> = {
+  uk: {
+    tactic_aircraft_activity: 'тактична авіація',
+    strategic_aircraft_activity: 'стратегічна авіація',
+    mig31k_departure: 'зліт МіГ-31К',
+    ballistic_missiles: 'балістика',
+    cruise_missiles: 'крилаті ракети',
+    unspecified_missiles: 'ракети',
+    drones: 'дрони',
+    guided_aerial_bombs: 'КАБи',
+    air_defense: 'робота ППО',
+    unknown: 'невідома загроза',
+  },
+  en: {
+    tactic_aircraft_activity: 'tactical aircraft',
+    strategic_aircraft_activity: 'strategic aircraft',
+    mig31k_departure: 'MiG-31K takeoff',
+    ballistic_missiles: 'ballistic missiles',
+    cruise_missiles: 'cruise missiles',
+    unspecified_missiles: 'missiles',
+    drones: 'drones',
+    guided_aerial_bombs: 'guided bombs',
+    air_defense: 'air defence active',
+    unknown: 'unknown threat',
+  },
+};
+
+export function threatLabel(language: Language, threat: ThreatType): string {
+  return THREAT_LABELS[language][threat];
+}
+
+/** Joins the threat breakdown for a tooltip or notification line. */
+export function threatSummary(language: Language, threats: ThreatType[] | undefined): string {
+  if (!threats || threats.length === 0) return '';
+  return threats.map((threat) => threatLabel(language, threat)).join(', ');
 }
 
 /**

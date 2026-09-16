@@ -25,6 +25,10 @@ export function sanitize(raw: unknown): Settings {
   return {
     providers: readProviders(input),
     apiKey: typeof input.apiKey === 'string' ? input.apiKey : DEFAULT_SETTINGS.apiKey,
+    alertsInUaToken:
+      typeof input.alertsInUaToken === 'string'
+        ? input.alertsInUaToken
+        : DEFAULT_SETTINGS.alertsInUaToken,
     regions: readRegions(input.regions),
     pollIntervalSec: clamp(
       input.pollIntervalSec,

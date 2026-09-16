@@ -1,5 +1,5 @@
 import { Notification } from 'electron';
-import { alertTypeLabel, t } from '../shared/i18n';
+import { alertTypeLabel, t, threatSummary } from '../shared/i18n';
 import type { ActiveAlert, Settings } from '../shared/types';
 import type { AlertTransition } from './alerts/poller';
 import { appIcon } from './trayIcon';
@@ -62,7 +62,10 @@ export class Notifier {
 function describeAlerts(alerts: ActiveAlert[], settings: Settings, kind: 'alert' | 'clear'): string {
   const lines = alerts.slice(0, 4).map((alert) => {
     const type = kind === 'alert' ? `${alertTypeLabel(settings.language, alert.type)}: ` : '';
-    return `${type}${alert.regionName}`;
+    // "drones" or "ballistic missiles" is the part worth reading first.
+    const threats = kind === 'alert' ? threatSummary(settings.language, alert.threats) : '';
+    const detail = threats ? ` — ${threats}` : '';
+    return `${type}${alert.regionName}${detail}`;
   });
 
   const remaining = alerts.length - lines.length;

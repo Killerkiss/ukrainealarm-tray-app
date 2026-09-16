@@ -13,9 +13,11 @@ glance — red during an alert, green when clear. Hover for the details.
 - **Precision control.** Most Ukrainian alerts are declared oblast-wide. Turn off
   *Alert on oblast-wide alerts* and you are notified only when the alert names your own raion
   or city — not when some other part of the oblast is under threat.
-- **Both sources at once.** Run the public mirror and the official API together; an alert
-  fires as soon as the *first* of them reports it, and one feed going down does not hide what
-  the other can see. A health panel shows each feed's live state.
+- **All three sources at once.** Run the public mirror, api.ukrainealarm.com and alerts.in.ua
+  together; an alert fires as soon as the *first* of them reports it, and one feed going down
+  does not hide what the others can see. A health panel shows each feed's live state.
+- **Knows what is inbound.** With alerts.in.ua enabled, the tray, notifications and window name
+  the actual threat — drones, ballistic or cruise missiles, guided bombs — not just "air raid".
 - **Colour-coded tray icon** — red on alert, green when clear, amber when the status is
   unknown. Switchable to a single neutral icon if you would rather it never change.
 - **Hover details.** The tooltip lists every active alert: threat type, region, and how long
@@ -85,15 +87,26 @@ npm run package:linux  # writes .deb and .AppImage into release/
 
 ## Data sources
 
-| | Public mirror (default) | api.ukrainealarm.com |
-|---|---|---|
-| API key | not needed | required, free |
-| Granularity | oblast and raion | oblast, raion and hromada |
-| Threat types | air raid only | air raid, artillery, urban fighting, chemical, nuclear |
+| | Public mirror (default) | api.ukrainealarm.com | alerts.in.ua |
+|---|---|---|---|
+| Credential | none | free API key | free app token |
+| Granularity | oblast, raion | oblast, raion, hromada | oblast, raion, hromada, city |
+| Alert types | air raid only | air raid, artillery, urban fighting, chemical, nuclear | same, plus `alert_level` |
+| **Threat detail** | — | — | **drones, ballistic, cruise missiles, guided bombs, MiG-31K…** |
+| Region list | yes | yes | **no — alerts only** |
 
-The app ships with the **public mirror** enabled, so it works the moment you launch it. To add
-the official API, get a free key from the [`@ukrainealarm_bot`](https://t.me/ukrainealarm_bot)
-Telegram bot and paste it into Settings → Sources.
+`alerts.in.ua` is the only source that says *what is actually inbound* rather than just "air
+raid", so it is the one to enable if you want to tell a drone alert from a ballistic launch.
+It publishes only active alerts and no region catalogue, so keep one of the other two enabled
+to populate the region picker.
+
+The app ships with the **public mirror** enabled, so it works the moment you launch it. The
+other two need a free credential, entered in Settings → Sources:
+
+- **api.ukrainealarm.com** — key from the [`@ukrainealarm_bot`](https://t.me/ukrainealarm_bot) Telegram bot.
+- **alerts.in.ua** — token requested at [devs.alerts.in.ua](https://devs.alerts.in.ua/). Note their
+  rate limit (12 requests/minute hard); the app sends conditional requests with
+  `If-Modified-Since` and a 15s floor on the poll interval keeps it well inside that.
 
 **Both can be enabled at the same time.** Results are merged: an alert reported by either
 source raises the alarm, and when both report the same alert the earlier start time wins. If

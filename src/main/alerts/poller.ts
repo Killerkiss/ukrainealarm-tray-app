@@ -81,7 +81,9 @@ export class AlertPoller extends EventEmitter {
     this.settings = settings;
 
     const sourcesChanged =
-      previous.providers.join() !== settings.providers.join() || previous.apiKey !== settings.apiKey;
+      previous.providers.join() !== settings.providers.join() ||
+      previous.apiKey !== settings.apiKey ||
+      previous.alertsInUaToken !== settings.alertsInUaToken;
     if (sourcesChanged) {
       this.aggregator = new ProviderAggregator(settings);
     }
@@ -138,7 +140,11 @@ export class AlertPoller extends EventEmitter {
         return;
       }
 
-      this.regionsError = null;
+      // alerts.in.ua reports alerts but publishes no region catalogue, so on
+      // its own the picker would just be empty with no explanation.
+      this.regionsError = result.regionsUnavailable
+        ? 'No enabled source provides a region list. Enable the public mirror or api.ukrainealarm.com to choose regions.'
+        : null;
       this.applyAlerts(result.alerts, result);
     } catch (error) {
       if (controller.signal.aborted) return;

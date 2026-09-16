@@ -1,4 +1,11 @@
-import { alertTypeLabel, formatDuration, formatTime, t, type StringKey } from '../shared/i18n';
+import {
+  alertTypeLabel,
+  formatDuration,
+  formatTime,
+  t,
+  threatSummary,
+  type StringKey,
+} from '../shared/i18n';
 import type { AlarmBridge } from '../shared/ipc';
 import {
   ALL_PROVIDERS,
@@ -18,7 +25,8 @@ declare global {
   }
 }
 
-const KEY_INSTRUCTIONS_URL = 'https://api.ukrainealarm.com/swagger/index.html';
+const UKRAINEALARM_DOCS_URL = 'https://api.ukrainealarm.com/swagger/index.html';
+const ALERTS_IN_UA_DOCS_URL = 'https://devs.alerts.in.ua/';
 
 type TabId = 'regions' | 'sources' | 'alerts' | 'appearance';
 
@@ -173,6 +181,10 @@ function renderStatus(current: AppState): HTMLElement {
             : null,
           // Which feed saw it matters when two sources disagree.
           el('span', { class: 'source-tag', text: alert.sources.join(' + ') }),
+          // Only alerts.in.ua says what is actually inbound.
+          alert.threats?.length
+            ? el('span', { class: 'threats', text: threatSummary(lang, alert.threats) })
+            : null,
         ]),
       );
     }
@@ -298,18 +310,23 @@ function renderSourceSection(current: AppState, container: HTMLElement): HTMLEle
     el('p', { class: 'hint', text: t(lang, 'sourcesHint') }),
   ]);
 
-  const labels: Record<ProviderId, { name: StringKey; hint: StringKey }> = {
+  const labels: Record<ProviderId, { name: StringKey; hint: StringKey; alertsOnly?: boolean }> = {
     free: { name: 'sourceFree', hint: 'sourceFreeHint' },
     ukrainealarm: { name: 'sourceOfficial', hint: 'sourceOfficialHint' },
+    alertsinua: { name: 'sourceAlertsInUa', hint: 'sourceAlertsInUaHint', alertsOnly: true },
   };
 
   for (const id of ALL_PROVIDERS) {
     // Turning off the last source would leave the app polling nothing.
     const isLastEnabled = enabled.has(id) && enabled.size === 1;
+    const hint = labels[id].alertsOnly
+      ? `${t(lang, labels[id].hint)} ${t(lang, 'alertsOnly')}`
+      : t(lang, labels[id].hint);
+
     section.append(
       toggle(
         t(lang, labels[id].name),
-        t(lang, labels[id].hint),
+        hint,
         enabled.has(id),
         (checked) => {
           const next = new Set(enabled);
@@ -327,33 +344,34 @@ function renderSourceSection(current: AppState, container: HTMLElement): HTMLEle
   }
 
   if (enabled.has('ukrainealarm')) {
-    const input = el('input', {
-      type: 'password',
-      value: settings.apiKey,
-      placeholder: lang === 'uk' ? 'Вставте API-ключ' : 'Paste your API key',
-      'aria-label': 'API key',
-    });
-    // Commit on blur/Enter rather than per keystroke: each change re-fetches
-    // the whole region list.
-    on(input, 'change', () => void patch({ apiKey: input.value.trim() }, container));
-
-    const link = el('a', { href: '#', text: KEY_INSTRUCTIONS_URL });
-    on(link, 'click', (event) => {
-      event.preventDefault();
-      void window.alarm.openExternal(KEY_INSTRUCTIONS_URL);
-    });
-
     section.append(
-      el('div', { class: 'field', style: 'margin-top:12px' }, [
-        el('label', { text: 'API key' }),
-        input,
-        el('span', { class: 'hint' }, [
+      credentialField({
+        label: 'API key',
+        value: settings.apiKey,
+        placeholder: lang === 'uk' ? 'Вставте API-ключ' : 'Paste your API key',
+        hint:
           lang === 'uk'
             ? 'Безкоштовний ключ видає бот @ukrainealarm_bot у Telegram. Документація: '
             : 'Get a free key from the @ukrainealarm_bot Telegram bot. Docs: ',
-          link,
-        ]),
-      ]),
+        url: UKRAINEALARM_DOCS_URL,
+        onCommit: (value) => void patch({ apiKey: value }, container),
+      }),
+    );
+  }
+
+  if (enabled.has('alertsinua')) {
+    section.append(
+      credentialField({
+        label: 'alerts.in.ua token',
+        value: settings.alertsInUaToken,
+        placeholder: lang === 'uk' ? 'Вставте токен' : 'Paste your token',
+        hint:
+          lang === 'uk'
+            ? 'Безкоштовний токен можна отримати за формою на сайті. Документація: '
+            : 'Request a free token via the form on their site. Docs: ',
+        url: ALERTS_IN_UA_DOCS_URL,
+        onCommit: (value) => void patch({ alertsInUaToken: value }, container),
+      }),
     );
   }
 
@@ -557,6 +575,37 @@ function renderFooter(current: AppState): HTMLElement {
 }
 
 /* ----------------------------------------------------------------- utils -- */
+
+/** A password-style credential input that commits on blur, not per keystroke. */
+function credentialField(options: {
+  label: string;
+  value: string;
+  placeholder: string;
+  hint: string;
+  url: string;
+  onCommit: (value: string) => void;
+}): HTMLElement {
+  const input = el('input', {
+    type: 'password',
+    value: options.value,
+    placeholder: options.placeholder,
+    'aria-label': options.label,
+  });
+  // Each change re-fetches from the source, so commit on blur/Enter only.
+  on(input, 'change', () => options.onCommit(input.value.trim()));
+
+  const link = el('a', { href: '#', text: options.url });
+  on(link, 'click', (event) => {
+    event.preventDefault();
+    void window.alarm.openExternal(options.url);
+  });
+
+  return el('div', { class: 'field', style: 'margin-top:12px' }, [
+    el('label', { text: options.label }),
+    input,
+    el('span', { class: 'hint' }, [options.hint, link]),
+  ]);
+}
 
 function toggle(
   label: string,

@@ -1,5 +1,5 @@
 import { Menu, Tray, type MenuItemConstructorOptions } from 'electron';
-import { alertTypeLabel, formatDuration, formatTime, t } from '../shared/i18n';
+import { alertTypeLabel, formatDuration, formatTime, t, threatSummary } from '../shared/i18n';
 import type { AlertSnapshot, Settings } from '../shared/types';
 import { iconFor } from './trayIcon';
 
@@ -92,7 +92,9 @@ export class TrayController {
       const elapsed = alert.since ? ` (${t(language, 'since')} ${formatDuration(language, alert.since)})` : '';
       // Naming the feed matters when only one of two sources sees an alert.
       const from = alert.sources.length > 0 ? ` [${alert.sources.join('+')}]` : '';
-      return `• ${type} — ${alert.regionName}${elapsed}${from}`;
+      const threats = threatSummary(language, alert.threats);
+      const detail = threats ? ` — ${threats}` : '';
+      return `• ${type} — ${alert.regionName}${detail}${elapsed}${from}`;
     });
 
     const remaining = alerts.length - lines.length;

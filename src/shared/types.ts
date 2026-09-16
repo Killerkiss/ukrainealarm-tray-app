@@ -15,9 +15,9 @@ export type AlertType =
   | 'nuclear'
   | 'unknown';
 
-export type ProviderId = 'free' | 'ukrainealarm';
+export type ProviderId = 'free' | 'ukrainealarm' | 'alertsinua';
 
-export const ALL_PROVIDERS: ProviderId[] = ['free', 'ukrainealarm'];
+export const ALL_PROVIDERS: ProviderId[] = ['free', 'ukrainealarm', 'alertsinua'];
 
 /**
  * A selectable place, identified by its canonical key (see `regionKey.ts`) so
@@ -42,7 +42,27 @@ export interface ActiveAlert {
   since?: string;
   /** Sources that are currently reporting this alert. */
   sources: ProviderId[];
+  /**
+   * Specific threats behind the alert (drones, cruise missiles, ballistic…),
+   * when a source breaks them down. Only alerts.in.ua reports these.
+   */
+  threats?: ThreatType[];
+  /** Free-text note from the source, e.g. who declared the alert. */
+  notes?: string;
 }
+
+/** Threat breakdown reported by alerts.in.ua alongside an alert. */
+export type ThreatType =
+  | 'tactic_aircraft_activity'
+  | 'strategic_aircraft_activity'
+  | 'mig31k_departure'
+  | 'ballistic_missiles'
+  | 'cruise_missiles'
+  | 'unspecified_missiles'
+  | 'drones'
+  | 'guided_aerial_bombs'
+  | 'air_defense'
+  | 'unknown';
 
 /** Per-source health, so the UI can show which feeds are actually working. */
 export interface SourceStatus {
@@ -78,8 +98,10 @@ export interface Settings {
    * raised as soon as the first of them reports it.
    */
   providers: ProviderId[];
-  /** API key for api.ukrainealarm.com. Ignored by the free provider. */
+  /** API key for api.ukrainealarm.com. Ignored by the other sources. */
   apiKey: string;
+  /** App token for alerts.in.ua. Ignored by the other sources. */
+  alertsInUaToken: string;
   /** Region ids the user wants to be alerted about. Empty means "nothing selected". */
   regions: string[];
   pollIntervalSec: number;
@@ -106,6 +128,7 @@ export type Language = 'uk' | 'en';
 export const DEFAULT_SETTINGS: Settings = {
   providers: ['free'],
   apiKey: '',
+  alertsInUaToken: '',
   regions: [],
   pollIntervalSec: 30,
   notifications: true,

@@ -1,10 +1,13 @@
 import type { ActiveAlert, ProviderId, Region, Settings, SourceStatus } from '../../shared/types';
+import { AlertsInUaProvider } from './alertsInUaProvider';
 import { FreeMirrorProvider } from './freeProvider';
 import type { AlertProvider } from './provider';
 import { UkraineAlarmProvider } from './ukraineAlarmProvider';
 
 export interface AggregateResult {
   regions: Region[];
+  /** True when no succeeding source can populate the region picker. */
+  regionsUnavailable: boolean;
   alerts: ActiveAlert[];
   sources: SourceStatus[];
   /** True when every enabled source failed, so the data is not trustworthy. */
@@ -25,9 +28,11 @@ export class ProviderAggregator {
   private readonly status = new Map<ProviderId, SourceStatus>();
 
   constructor(settings: Settings) {
-    this.providers = settings.providers.map((id) =>
-      id === 'ukrainealarm' ? new UkraineAlarmProvider(settings.apiKey) : new FreeMirrorProvider(),
-    );
+    this.providers = settings.providers.map((id) => {
+      if (id === 'ukrainealarm') return new UkraineAlarmProvider(settings.apiKey);
+      if (id === 'alertsinua') return new AlertsInUaProvider(settings.alertsInUaToken);
+      return new FreeMirrorProvider();
+    });
     for (const provider of this.providers) {
       this.status.set(provider.id, {
         id: provider.id,
@@ -76,8 +81,10 @@ export class ProviderAggregator {
       });
     });
 
+    const regions = mergeRegions(succeeded);
     return {
-      regions: mergeRegions(succeeded),
+      regions,
+      regionsUnavailable: succeeded.length > 0 && regions.length === 0,
       alerts: mergeAlerts(succeeded),
       sources: this.providers
         .map((provider) => this.status.get(provider.id))
@@ -153,6 +160,13 @@ function mergeAlerts(results: SourceResult[]): ActiveAlert[] {
         if (!existing.sources.includes(source)) existing.sources.push(source);
       }
       if (isEarlier(alert.since, existing.since)) existing.since = alert.since;
+
+      // Only alerts.in.ua breaks an alert down into drones/missiles/bombs, so
+      // that detail must survive the merge with a source that lacks it.
+      if (alert.threats?.length) {
+        existing.threats = [...new Set([...(existing.threats ?? []), ...alert.threats])];
+      }
+      if (alert.notes && !existing.notes) existing.notes = alert.notes;
       // A longer name usually carries the parent region too; keep the richer one.
       if (alert.regionName.length > existing.regionName.length) {
         existing.regionName = alert.regionName;
