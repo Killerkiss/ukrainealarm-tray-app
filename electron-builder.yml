@@ -1,0 +1,51 @@
+appId: com.killerkiss.ukrainealarmtray
+productName: Ukraine Alarm Tray
+copyright: MIT
+
+directories:
+  output: release
+  buildResources: assets
+
+files:
+  - dist/**/*
+  - package.json
+
+# Icons, sounds and the offscreen audio host are read from disk at runtime, so
+# they ship as resources rather than being bundled into the asar.
+extraResources:
+  - from: assets
+    to: assets
+    filter:
+      - icons/**/*
+      - sounds/**/*
+      - player.html
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+  icon: assets/icons/app
+  synopsis: Ukrainian air-raid alerts in your system tray
+  description: >
+    Tray application for Ukrainian air-raid (drone and missile) alerts with
+    per-region selection, desktop notifications, sound and a colour-coded icon.
+
+win:
+  target:
+    - nsis
+  icon: assets/icons/icon.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.utilities
+  icon: assets/icons/icon.png
+  # A menu-bar-only app: no Dock icon, no app switcher entry.
+  extendInfo:
+    LSUIElement: true

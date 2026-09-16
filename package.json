@@ -1,0 +1,32 @@
+{
+  "name": "ukrainealarm-tray-app",
+  "productName": "Ukraine Alarm Tray",
+  "version": "0.1.0",
+  "description": "Cross-platform tray app for Ukrainian air-raid (drone/missile) alerts, with per-region selection, notifications, sound and colour-coded tray icon.",
+  "license": "MIT",
+  "author": "Killerkiss",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "icons": "node scripts/generate-icons.mjs",
+    "sounds": "node scripts/generate-sounds.mjs",
+    "assets": "npm run icons && npm run sounds",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "start": "npm run build && electron .",
+    "package": "npm run build && electron-builder",
+    "package:linux": "npm run build && electron-builder --linux",
+    "package:win": "npm run build && electron-builder --win",
+    "package:mac": "npm run build && electron-builder --mac",
+    "test": "npm run build:main && node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}
