@@ -214,3 +214,4 @@ The app runs as a menu-bar app with no Dock icon (`LSUIElement`).
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
