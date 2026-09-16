@@ -90,7 +90,9 @@ export class TrayController {
     const lines = alerts.slice(0, MAX_DETAIL_LINES).map((alert) => {
       const type = alertTypeLabel(language, alert.type);
       const elapsed = alert.since ? ` (${t(language, 'since')} ${formatDuration(language, alert.since)})` : '';
-      return `• ${type} — ${alert.regionName}${elapsed}`;
+      // Naming the feed matters when only one of two sources sees an alert.
+      const from = alert.sources.length > 0 ? ` [${alert.sources.join('+')}]` : '';
+      return `• ${type} — ${alert.regionName}${elapsed}${from}`;
     });
 
     const remaining = alerts.length - lines.length;

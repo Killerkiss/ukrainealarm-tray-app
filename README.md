@@ -8,9 +8,14 @@ glance — red during an alert, green when clear. Hover for the details.
 
 ## Features
 
-- **Per-region subscriptions.** Choose any combination of oblasts and raions. Selecting an
-  oblast covers every raion inside it, and an oblast-wide alert still reaches you if you
-  subscribed to just one raion within it.
+- **Per-region subscriptions.** Choose any combination of oblasts, raions and (with the
+  official API) hromadas. Selecting a region covers everything inside it.
+- **Precision control.** Most Ukrainian alerts are declared oblast-wide. Turn off
+  *Alert on oblast-wide alerts* and you are notified only when the alert names your own raion
+  or city — not when some other part of the oblast is under threat.
+- **Both sources at once.** Run the public mirror and the official API together; an alert
+  fires as soon as the *first* of them reports it, and one feed going down does not hide what
+  the other can see. A health panel shows each feed's live state.
 - **Colour-coded tray icon** — red on alert, green when clear, amber when the status is
   unknown. Switchable to a single neutral icon if you would rather it never change.
 - **Hover details.** The tooltip lists every active alert: threat type, region, and how long
@@ -19,7 +24,7 @@ glance — red during an alert, green when clear. Hover for the details.
 - **Optional desktop notifications**, with a separate toggle for the all-clear.
 - **Optional sound** — a siren on alert, a softer chime on all-clear, with a volume slider,
   a test button and a mute switch in the tray menu.
-- **Two data sources**, switchable at runtime (see [Data sources](#data-sources)).
+- **Tabbed, two-column settings** — Regions, Sources, Notifications, Appearance.
 - **Ukrainian and English** interface. Ukrainian is the default.
 
 ## Install
@@ -86,12 +91,18 @@ npm run package:linux  # writes .deb and .AppImage into release/
 | Granularity | oblast and raion | oblast, raion and hromada |
 | Threat types | air raid only | air raid, artillery, urban fighting, chemical, nuclear |
 
-The app ships with the **public mirror** selected, so it works the moment you launch it. To
-use the official API, get a free key from the [`@ukrainealarm_bot`](https://t.me/ukrainealarm_bot)
-Telegram bot and paste it into Settings → Data source.
+The app ships with the **public mirror** enabled, so it works the moment you launch it. To add
+the official API, get a free key from the [`@ukrainealarm_bot`](https://t.me/ukrainealarm_bot)
+Telegram bot and paste it into Settings → Sources.
 
-Region ids differ between the two sources, so **switching provider clears your selection** —
-you will need to pick your regions again.
+**Both can be enabled at the same time.** Results are merged: an alert reported by either
+source raises the alarm, and when both report the same alert the earlier start time wins. If
+one feed fails, the other keeps working and the failure is shown per-source rather than
+blanking the app.
+
+Each source numbers its regions differently, so the app derives a canonical key from the place
+name (`ua:вінницька/вінницький`) and merges the two region trees onto it. That is what lets
+one selection work across both feeds — see [`src/shared/regionKey.ts`](src/shared/regionKey.ts).
 
 > This app reports what its data source reports. Treat it as a convenience, not as your
 > primary warning system, and always follow official civil-defence guidance.

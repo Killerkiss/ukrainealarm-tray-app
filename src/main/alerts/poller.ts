@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { ActiveAlert, AlertSnapshot, Region, Settings } from '../../shared/types';
-import { createProvider, type AlertProvider } from './index';
+import { ProviderAggregator, type Logger } from './aggregator';
 import { alertConcernsUser, buildRegionIndex, type RegionIndex } from './regionMatching';
 
 /** What changed between two polls, used to drive notifications and sound. */
@@ -9,27 +9,22 @@ export interface AlertTransition {
   ended: ActiveAlert[];
 }
 
-export interface PollerEvents {
-  snapshot: (snapshot: AlertSnapshot, transition: AlertTransition) => void;
-  regions: (regions: Region[], error: string | null, loading: boolean) => void;
-}
-
 const EMPTY_SNAPSHOT: AlertSnapshot = {
   status: 'unknown',
   alerts: [],
   countrywideCount: 0,
+  sources: [],
   lastUpdated: null,
   error: null,
 };
 
 /**
- * Owns the polling loop. It re-reads settings on every change, re-fetching the
- * region list only when the provider or its credentials actually change, since
- * that list is large and nearly static.
+ * Owns the polling loop. Every poll asks the aggregator for a merged view of
+ * all enabled sources, then narrows it to the regions the user selected.
  */
 export class AlertPoller extends EventEmitter {
   private settings: Settings;
-  private provider: AlertProvider;
+  private aggregator: ProviderAggregator;
   private timer: NodeJS.Timeout | null = null;
   private inFlight: AbortController | null = null;
 
@@ -37,18 +32,19 @@ export class AlertPoller extends EventEmitter {
   private regionIndex: RegionIndex = new Map();
   private regionsError: string | null = null;
   private regionsLoading = false;
-  /** Identifies the provider configuration the cached regions belong to. */
-  private regionsFor = '';
 
   private snapshot: AlertSnapshot = EMPTY_SNAPSHOT;
   /** User-relevant alerts from the previous poll, keyed by `regionId|type`.
    *  `null` means no successful poll has happened yet. */
   private previousAlerts: Map<string, ActiveAlert> | null = null;
 
-  constructor(settings: Settings) {
+  constructor(
+    settings: Settings,
+    private readonly logger: Logger = console,
+  ) {
     super();
     this.settings = settings;
-    this.provider = createProvider(settings);
+    this.aggregator = new ProviderAggregator(settings);
   }
 
   getSnapshot(): AlertSnapshot {
@@ -83,13 +79,16 @@ export class AlertPoller extends EventEmitter {
   updateSettings(settings: Settings): void {
     const previous = this.settings;
     this.settings = settings;
-    this.provider = createProvider(settings);
 
-    const providerChanged =
-      previous.provider !== settings.provider || previous.apiKey !== settings.apiKey;
-    if (providerChanged) {
-      this.regionsFor = '';
-      // Selections belong to the old provider's id space; forget what we knew.
+    const sourcesChanged =
+      previous.providers.join() !== settings.providers.join() || previous.apiKey !== settings.apiKey;
+    if (sourcesChanged) {
+      this.aggregator = new ProviderAggregator(settings);
+    }
+
+    // Narrowing the match rules can silence an alert that was active a moment
+    // ago; that is a settings change, not an all-clear worth announcing.
+    if (previous.matchParentAlerts !== settings.matchParentAlerts) {
       this.previousAlerts = null;
     }
 
@@ -116,53 +115,65 @@ export class AlertPoller extends EventEmitter {
     const controller = new AbortController();
     this.inFlight = controller;
 
-    try {
-      await this.ensureRegions(controller.signal);
-      const alerts = await this.provider.fetchAlerts(controller.signal);
-      if (controller.signal.aborted) return;
-      this.applyAlerts(alerts);
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      this.applyError(error);
-    } finally {
-      if (this.inFlight === controller) this.inFlight = null;
+    if (this.regions.length === 0) {
+      this.regionsLoading = true;
+      this.emit('regions', this.regions, this.regionsError, true);
     }
-  }
 
-  private async ensureRegions(signal: AbortSignal): Promise<void> {
-    const key = `${this.settings.provider}:${this.settings.apiKey}`;
-    if (this.regionsFor === key && this.regions.length > 0) return;
-
-    this.regionsLoading = true;
-    this.emit('regions', this.regions, this.regionsError, true);
     try {
-      const regions = await this.provider.fetchRegions(signal);
-      this.regions = regions;
-      this.regionIndex = buildRegionIndex(regions);
+      const result = await this.aggregator.fetchAll(controller.signal, this.logger);
+      if (controller.signal.aborted) return;
+
+      if (result.regions.length > 0) {
+        this.regions = result.regions.sort(compareRegions);
+        this.regionIndex = buildRegionIndex(this.regions);
+      }
+
+      if (result.allFailed) {
+        const reasons = result.sources
+          .map((source) => `${source.id}: ${source.error ?? 'unknown error'}`)
+          .join('; ');
+        this.regionsError = reasons;
+        this.applyError(`All sources failed — ${reasons}`);
+        return;
+      }
+
       this.regionsError = null;
-      this.regionsFor = key;
+      this.applyAlerts(result.alerts, result);
     } catch (error) {
-      if (signal.aborted) return;
-      this.regionsError = describeError(error);
-      throw error;
+      if (controller.signal.aborted) return;
+      this.applyError(describeError(error));
     } finally {
       this.regionsLoading = false;
+      if (this.inFlight === controller) this.inFlight = null;
       this.emit('regions', this.regions, this.regionsError, false);
     }
   }
 
-  private applyAlerts(all: ActiveAlert[]): void {
+  private applyAlerts(
+    all: ActiveAlert[],
+    result: { sources: AlertSnapshot['sources'] },
+  ): void {
     const selected = new Set(this.settings.regions);
     const relevant = all.filter((alert) =>
-      alertConcernsUser(alert.regionId, selected, this.regionIndex),
+      alertConcernsUser(alert.regionId, selected, this.regionIndex, {
+        matchParentAlerts: this.settings.matchParentAlerts,
+      }),
     );
+
+    // A partial failure still produces usable data, but say so in the UI.
+    const failed = result.sources.filter((source) => !source.ok);
 
     const snapshot: AlertSnapshot = {
       status: selected.size === 0 ? 'unknown' : relevant.length > 0 ? 'alert' : 'clear',
       alerts: relevant,
       countrywideCount: all.length,
+      sources: result.sources,
       lastUpdated: new Date().toISOString(),
-      error: null,
+      error:
+        failed.length > 0
+          ? failed.map((source) => `${source.id}: ${source.error ?? 'failed'}`).join('; ')
+          : null,
     };
 
     const transition = this.diff(relevant);
@@ -170,12 +181,8 @@ export class AlertPoller extends EventEmitter {
     this.emit('snapshot', snapshot, transition);
   }
 
-  private applyError(error: unknown): void {
-    this.snapshot = {
-      ...this.snapshot,
-      status: 'unknown',
-      error: describeError(error),
-    };
+  private applyError(message: string): void {
+    this.snapshot = { ...this.snapshot, status: 'unknown', error: message };
     // A failed poll tells us nothing, so it must not fire "all clear".
     this.emit('snapshot', this.snapshot, { started: [], ended: [] });
   }
@@ -205,6 +212,11 @@ export class AlertPoller extends EventEmitter {
 
 function alertKey(alert: ActiveAlert): string {
   return `${alert.regionId}|${alert.type}`;
+}
+
+/** Oblasts alphabetically, each with its children immediately after it. */
+function compareRegions(a: Region, b: Region): number {
+  return a.id.localeCompare(b.id, 'uk');
 }
 
 export function describeError(error: unknown): string {

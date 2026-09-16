@@ -1,11 +1,11 @@
-import type { ActiveAlert, Region } from '../../shared/types';
+import type { ActiveAlert, ProviderId, Region } from '../../shared/types';
 
 /**
  * A source of air-raid data. Implementations must be stateless with respect to
  * user settings: the poller passes everything they need on each call.
  */
 export interface AlertProvider {
-  readonly id: string;
+  readonly id: ProviderId;
   /** Shown in the UI so the user knows where the data comes from. */
   readonly label: string;
   /** True when {@link fetchRegions}/{@link fetchAlerts} need an API key. */

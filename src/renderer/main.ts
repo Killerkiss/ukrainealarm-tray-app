@@ -1,10 +1,12 @@
-import { alertTypeLabel, formatDuration, formatTime, t } from '../shared/i18n';
+import { alertTypeLabel, formatDuration, formatTime, t, type StringKey } from '../shared/i18n';
 import type { AlarmBridge } from '../shared/ipc';
 import {
+  ALL_PROVIDERS,
   POLL_INTERVAL_MAX_SEC,
   POLL_INTERVAL_MIN_SEC,
   type AppState,
   type Language,
+  type ProviderId,
   type Settings,
 } from '../shared/types';
 import { el, on } from './dom';
@@ -18,8 +20,18 @@ declare global {
 
 const KEY_INSTRUCTIONS_URL = 'https://api.ukrainealarm.com/swagger/index.html';
 
+type TabId = 'regions' | 'sources' | 'alerts' | 'appearance';
+
+const TABS: { id: TabId; label: StringKey }[] = [
+  { id: 'regions', label: 'tabRegions' },
+  { id: 'sources', label: 'tabSources' },
+  { id: 'alerts', label: 'tabAlerts' },
+  { id: 'appearance', label: 'tabAppearance' },
+];
+
 /** UI-only state that must survive a re-render. */
 const ui = {
+  tab: 'regions' as TabId,
   query: '',
   openGroups: new Set<string>(),
   scrollTop: 0,
@@ -42,21 +54,21 @@ async function bootstrap(container: HTMLElement): Promise<void> {
     render(container);
   });
 
-  // Elapsed times in the status banner would otherwise only move when a poll
-  // lands, which can be minutes apart.
+  // Elapsed times would otherwise only move when a poll lands.
   setInterval(() => {
     if (state?.snapshot.status === 'alert') render(container);
   }, 30_000);
 }
 
-async function patch(patchValue: Partial<Settings>, container: HTMLElement): Promise<void> {
-  state = await window.alarm.updateSettings(patchValue);
+async function patch(value: Partial<Settings>, container: HTMLElement): Promise<void> {
+  state = await window.alarm.updateSettings(value);
   render(container);
 }
 
 function render(container: HTMLElement): void {
   if (!state) return;
   const current = state;
+
   // Capture transient UI state before the DOM is replaced.
   const list = document.getElementById('region-list');
   if (list) ui.scrollTop = list.scrollTop;
@@ -64,10 +76,8 @@ function render(container: HTMLElement): void {
 
   container.replaceChildren(
     renderStatus(current),
-    renderSourceSection(current, container),
-    renderRegionSection(current, container),
-    renderNotificationSection(current, container),
-    renderAppearanceSection(current, container),
+    renderTabBar(current, container),
+    renderTabPanel(current, container),
     renderFooter(current),
   );
   container.removeAttribute('aria-busy');
@@ -79,6 +89,49 @@ function render(container: HTMLElement): void {
     search?.focus();
     search?.setSelectionRange(search.value.length, search.value.length);
   }
+}
+
+/* ------------------------------------------------------------------ tabs -- */
+
+function renderTabBar(current: AppState, container: HTMLElement): HTMLElement {
+  const lang = current.settings.language;
+  const bar = el('nav', { class: 'tabs', role: 'tablist' });
+
+  for (const tab of TABS) {
+    const button = el('button', {
+      class: 'tab',
+      type: 'button',
+      role: 'tab',
+      'aria-selected': String(ui.tab === tab.id),
+      text: t(lang, tab.label),
+    });
+    on(button, 'click', () => {
+      ui.tab = tab.id;
+      render(container);
+    });
+    bar.append(button);
+  }
+  return bar;
+}
+
+function renderTabPanel(current: AppState, container: HTMLElement): HTMLElement {
+  const panel = el('div', { class: 'tab-panel', role: 'tabpanel' });
+
+  switch (ui.tab) {
+    case 'regions':
+      panel.append(renderRegionSection(current, container), renderSelectionSection(current, container));
+      break;
+    case 'sources':
+      panel.append(renderSourceSection(current, container), renderHealthSection(current, container));
+      break;
+    case 'alerts':
+      panel.append(renderNotificationSection(current, container), renderSoundSection(current, container));
+      break;
+    case 'appearance':
+      panel.append(renderIconSection(current, container), renderStartupSection(current, container));
+      break;
+  }
+  return panel;
 }
 
 /* ---------------------------------------------------------------- status -- */
@@ -118,6 +171,8 @@ function renderStatus(current: AppState): HTMLElement {
                 text: ` (${t(lang, 'since')} ${formatDuration(lang, alert.since)})`,
               })
             : null,
+          // Which feed saw it matters when two sources disagree.
+          el('span', { class: 'source-tag', text: alert.sources.join(' + ') }),
         ]),
       );
     }
@@ -128,111 +183,9 @@ function renderStatus(current: AppState): HTMLElement {
     section.append(el('p', { class: 'status-error', text: `${t(lang, 'error')}: ${snapshot.error}` }));
   }
 
-  const refresh = el('button', {
-    type: 'button',
-    text: t(lang, 'refreshNow'),
-    style: 'margin-top:10px',
-  });
+  const refresh = el('button', { type: 'button', text: t(lang, 'refreshNow'), style: 'margin-top:10px' });
   on(refresh, 'click', () => void window.alarm.refreshNow());
   section.append(refresh);
-
-  return section;
-}
-
-/* ---------------------------------------------------------------- source -- */
-
-function renderSourceSection(current: AppState, container: HTMLElement): HTMLElement {
-  const { settings } = current;
-  const lang = settings.language;
-  const section = el('section', {}, [
-    el('h2', { text: lang === 'uk' ? 'Джерело даних' : 'Data source' }),
-  ]);
-
-  const select = el('select', { 'aria-label': lang === 'uk' ? 'Джерело даних' : 'Data source' }, [
-    el('option', {
-      value: 'free',
-      text: lang === 'uk' ? 'Публічне дзеркало (без ключа)' : 'Public mirror (no API key)',
-      ...(settings.provider === 'free' ? { selected: true } : {}),
-    }),
-    el('option', {
-      value: 'ukrainealarm',
-      text: lang === 'uk' ? 'api.ukrainealarm.com (потрібен ключ)' : 'api.ukrainealarm.com (API key)',
-      ...(settings.provider === 'ukrainealarm' ? { selected: true } : {}),
-    }),
-  ]);
-  on(select, 'change', () => {
-    // Region ids are provider-specific, so a switch invalidates the selection.
-    void patch({ provider: select.value as Settings['provider'], regions: [] }, container);
-  });
-
-  section.append(
-    el('div', { class: 'field' }, [
-      el('label', { text: lang === 'uk' ? 'Постачальник' : 'Provider' }),
-      select,
-      el('span', {
-        class: 'hint',
-        text:
-          lang === 'uk'
-            ? 'Дзеркало працює без налаштувань (область/район). Офіційний API дає типи загроз і точність до громади.'
-            : 'The mirror works with no setup (oblast/raion). The official API adds threat types and hromada-level precision.',
-      }),
-    ]),
-  );
-
-  if (settings.provider === 'ukrainealarm') {
-    const input = el('input', {
-      type: 'password',
-      value: settings.apiKey,
-      placeholder: lang === 'uk' ? 'Вставте API-ключ' : 'Paste your API key',
-      'aria-label': 'API key',
-    });
-    // Commit on blur/Enter rather than per keystroke: each change re-fetches
-    // the whole region list.
-    on(input, 'change', () => void patch({ apiKey: input.value.trim() }, container));
-
-    const link = el('a', { href: '#', text: KEY_INSTRUCTIONS_URL });
-    on(link, 'click', (event) => {
-      event.preventDefault();
-      void window.alarm.openExternal(KEY_INSTRUCTIONS_URL);
-    });
-
-    section.append(
-      el('div', { class: 'field' }, [
-        el('label', { text: 'API key' }),
-        input,
-        el('span', { class: 'hint' }, [
-          lang === 'uk' ? 'Безкоштовний ключ видає бот @ukrainealarm_bot у Telegram. Документація: ' : 'Get a free key from the @ukrainealarm_bot Telegram bot. Docs: ',
-          link,
-        ]),
-      ]),
-    );
-
-    if (current.regionsError) {
-      section.append(el('p', { class: 'status-error', text: current.regionsError }));
-    }
-  }
-
-  const interval = el('input', {
-    type: 'number',
-    min: POLL_INTERVAL_MIN_SEC,
-    max: POLL_INTERVAL_MAX_SEC,
-    step: 5,
-    value: settings.pollIntervalSec,
-    'aria-label': lang === 'uk' ? 'Інтервал оновлення' : 'Poll interval',
-  });
-  on(interval, 'change', () => void patch({ pollIntervalSec: Number(interval.value) }, container));
-
-  section.append(
-    el('div', { class: 'field' }, [
-      el('label', { text: lang === 'uk' ? 'Інтервал оновлення (секунд)' : 'Poll interval (seconds)' }),
-      interval,
-      el('span', {
-        class: 'hint',
-        text: `${POLL_INTERVAL_MIN_SEC}–${POLL_INTERVAL_MAX_SEC} ${lang === 'uk' ? 'секунд' : 'seconds'}`,
-      }),
-    ]),
-  );
-
   return section;
 }
 
@@ -243,9 +196,7 @@ function renderRegionSection(current: AppState, container: HTMLElement): HTMLEle
   const lang = settings.language;
   const selected = new Set(settings.regions);
 
-  const section = el('section', {}, [
-    el('h2', { text: lang === 'uk' ? 'Мої регіони' : 'My regions' }),
-  ]);
+  const section = el('section', {}, [el('h2', { text: t(lang, 'regionPicker') })]);
 
   section.append(
     renderRegionPicker({
@@ -274,7 +225,195 @@ function renderRegionSection(current: AppState, container: HTMLElement): HTMLEle
       onClear: () => void patch({ regions: [] }, container),
     }),
   );
+  return section;
+}
 
+/** Right-hand column of the Regions tab: what is selected, and how precisely. */
+function renderSelectionSection(current: AppState, container: HTMLElement): HTMLElement {
+  const { settings } = current;
+  const lang = settings.language;
+  const byId = new Map(current.regions.map((region) => [region.id, region]));
+
+  const section = el('section', {}, [
+    el('h2', { text: `${t(lang, 'selectedRegions')} (${settings.regions.length})` }),
+  ]);
+
+  if (settings.regions.length === 0) {
+    section.append(el('p', { class: 'hint', text: t(lang, 'noneSelected') }));
+  } else {
+    const chips = el('div', { class: 'chips' });
+    for (const id of settings.regions) {
+      const region = byId.get(id);
+      const parent = region?.parentId ? byId.get(region.parentId) : undefined;
+      const name = region ? (parent ? `${region.name}, ${parent.name}` : region.name) : id;
+
+      const remove = el('button', { type: 'button', text: '✕', 'aria-label': t(lang, 'remove') });
+      on(remove, 'click', () =>
+        void patch({ regions: settings.regions.filter((other) => other !== id) }, container),
+      );
+
+      chips.append(
+        el('div', { class: 'chip' }, [
+          el('span', { class: 'chip-name', text: name }),
+          el('span', { class: 'chip-level', text: levelLabel(lang, region?.level) }),
+          remove,
+        ]),
+      );
+    }
+    section.append(chips);
+  }
+
+  section.append(
+    el('h2', { text: t(lang, 'precision'), style: 'margin-top:16px' }),
+    toggle(
+      t(lang, 'matchParent'),
+      t(lang, 'matchParentHint'),
+      settings.matchParentAlerts,
+      (checked) => void patch({ matchParentAlerts: checked }, container),
+    ),
+  );
+
+  if (!settings.matchParentAlerts) {
+    section.append(el('p', { class: 'notice', text: t(lang, 'strictNotice') }));
+  }
+  return section;
+}
+
+function levelLabel(lang: Language, level: string | undefined): string {
+  if (level === 'state') return lang === 'uk' ? 'область' : 'oblast';
+  if (level === 'district') return lang === 'uk' ? 'район' : 'raion';
+  if (level === 'community') return lang === 'uk' ? 'громада' : 'hromada';
+  return '';
+}
+
+/* --------------------------------------------------------------- sources -- */
+
+function renderSourceSection(current: AppState, container: HTMLElement): HTMLElement {
+  const { settings } = current;
+  const lang = settings.language;
+  const enabled = new Set(settings.providers);
+
+  const section = el('section', {}, [
+    el('h2', { text: t(lang, 'sources') }),
+    el('p', { class: 'hint', text: t(lang, 'sourcesHint') }),
+  ]);
+
+  const labels: Record<ProviderId, { name: StringKey; hint: StringKey }> = {
+    free: { name: 'sourceFree', hint: 'sourceFreeHint' },
+    ukrainealarm: { name: 'sourceOfficial', hint: 'sourceOfficialHint' },
+  };
+
+  for (const id of ALL_PROVIDERS) {
+    // Turning off the last source would leave the app polling nothing.
+    const isLastEnabled = enabled.has(id) && enabled.size === 1;
+    section.append(
+      toggle(
+        t(lang, labels[id].name),
+        t(lang, labels[id].hint),
+        enabled.has(id),
+        (checked) => {
+          const next = new Set(enabled);
+          if (checked) next.add(id);
+          else next.delete(id);
+          void patch({ providers: [...next] }, container);
+        },
+        { disabled: isLastEnabled },
+      ),
+    );
+  }
+
+  if (enabled.size === 1) {
+    section.append(el('p', { class: 'hint', text: t(lang, 'needOneSource') }));
+  }
+
+  if (enabled.has('ukrainealarm')) {
+    const input = el('input', {
+      type: 'password',
+      value: settings.apiKey,
+      placeholder: lang === 'uk' ? 'Вставте API-ключ' : 'Paste your API key',
+      'aria-label': 'API key',
+    });
+    // Commit on blur/Enter rather than per keystroke: each change re-fetches
+    // the whole region list.
+    on(input, 'change', () => void patch({ apiKey: input.value.trim() }, container));
+
+    const link = el('a', { href: '#', text: KEY_INSTRUCTIONS_URL });
+    on(link, 'click', (event) => {
+      event.preventDefault();
+      void window.alarm.openExternal(KEY_INSTRUCTIONS_URL);
+    });
+
+    section.append(
+      el('div', { class: 'field', style: 'margin-top:12px' }, [
+        el('label', { text: 'API key' }),
+        input,
+        el('span', { class: 'hint' }, [
+          lang === 'uk'
+            ? 'Безкоштовний ключ видає бот @ukrainealarm_bot у Telegram. Документація: '
+            : 'Get a free key from the @ukrainealarm_bot Telegram bot. Docs: ',
+          link,
+        ]),
+      ]),
+    );
+  }
+
+  return section;
+}
+
+/** Right-hand column of the Sources tab: live health plus the poll interval. */
+function renderHealthSection(current: AppState, container: HTMLElement): HTMLElement {
+  const { settings, snapshot } = current;
+  const lang = settings.language;
+
+  const section = el('section', {}, [el('h2', { text: t(lang, 'health') })]);
+  const health = el('div', { class: 'health' });
+
+  for (const id of settings.providers) {
+    const status = snapshot.sources.find((source) => source.id === id);
+    const state = status === undefined ? 'wait' : status.ok ? 'ok' : 'fail';
+    const label =
+      state === 'ok' ? t(lang, 'healthOk') : state === 'fail' ? t(lang, 'healthFail') : t(lang, 'healthWaiting');
+
+    health.append(
+      el('div', { class: 'health-row' }, [
+        el('span', { class: 'dot', 'data-state': state }),
+        el('span', { class: 'health-name', text: id }),
+        el('span', {
+          class: 'health-meta',
+          text:
+            state === 'ok'
+              ? `${label} · ${status?.alertCount ?? 0} ${t(lang, 'alertsReported')}`
+              : label,
+        }),
+      ]),
+    );
+
+    if (status && !status.ok && status.error) {
+      health.append(el('p', { class: 'status-error', text: status.error }));
+    }
+  }
+  section.append(health);
+
+  const interval = el('input', {
+    type: 'number',
+    min: POLL_INTERVAL_MIN_SEC,
+    max: POLL_INTERVAL_MAX_SEC,
+    step: 5,
+    value: settings.pollIntervalSec,
+    'aria-label': lang === 'uk' ? 'Інтервал оновлення' : 'Poll interval',
+  });
+  on(interval, 'change', () => void patch({ pollIntervalSec: Number(interval.value) }, container));
+
+  section.append(
+    el('div', { class: 'field', style: 'margin-top:16px' }, [
+      el('label', { text: lang === 'uk' ? 'Інтервал оновлення (секунд)' : 'Poll interval (seconds)' }),
+      interval,
+      el('span', {
+        class: 'hint',
+        text: `${POLL_INTERVAL_MIN_SEC}–${POLL_INTERVAL_MAX_SEC} ${lang === 'uk' ? 'секунд' : 'seconds'}`,
+      }),
+    ]),
+  );
   return section;
 }
 
@@ -284,8 +423,8 @@ function renderNotificationSection(current: AppState, container: HTMLElement): H
   const { settings } = current;
   const lang = settings.language;
 
-  const section = el('section', {}, [
-    el('h2', { text: lang === 'uk' ? 'Сповіщення та звук' : 'Notifications & sound' }),
+  return el('section', {}, [
+    el('h2', { text: lang === 'uk' ? 'Сповіщення' : 'Notifications' }),
     toggle(
       lang === 'uk' ? 'Показувати сповіщення' : 'Show desktop notifications',
       lang === 'uk' ? 'Системне сповіщення на початку тривоги.' : 'A system notification when an alert starts.',
@@ -299,6 +438,15 @@ function renderNotificationSection(current: AppState, container: HTMLElement): H
       (checked) => void patch({ notifyOnClear: checked }, container),
       { nested: true, disabled: !settings.notifications },
     ),
+  ]);
+}
+
+function renderSoundSection(current: AppState, container: HTMLElement): HTMLElement {
+  const { settings } = current;
+  const lang = settings.language;
+
+  const section = el('section', {}, [
+    el('h2', { text: lang === 'uk' ? 'Звук' : 'Sound' }),
     toggle(
       lang === 'uk' ? 'Відтворювати звук' : 'Play sound',
       lang === 'uk' ? 'Сирена на початку тривоги.' : 'A siren when an alert starts.',
@@ -334,17 +482,35 @@ function renderNotificationSection(current: AppState, container: HTMLElement): H
 
   section.append(
     el('div', { class: 'field' }, [
-      el('label', { text: `${lang === 'uk' ? 'Гучність' : 'Volume'}: ${Math.round(settings.soundVolume * 100)}%` }),
+      el('label', {
+        text: `${lang === 'uk' ? 'Гучність' : 'Volume'}: ${Math.round(settings.soundVolume * 100)}%`,
+      }),
       el('div', { class: 'row' }, [volume, test]),
     ]),
   );
-
   return section;
 }
 
 /* ------------------------------------------------------------ appearance -- */
 
-function renderAppearanceSection(current: AppState, container: HTMLElement): HTMLElement {
+function renderIconSection(current: AppState, container: HTMLElement): HTMLElement {
+  const { settings } = current;
+  const lang = settings.language;
+
+  return el('section', {}, [
+    el('h2', { text: lang === 'uk' ? 'Іконка' : 'Tray icon' }),
+    toggle(
+      lang === 'uk' ? 'Кольорова іконка в треї' : 'Colour-coded tray icon',
+      lang === 'uk'
+        ? 'Червона під час тривоги, зелена у спокої, жовта коли стан невідомий. Вимкніть для однотонної іконки.'
+        : 'Red during an alert, green when clear, amber when unknown. Turn off for a single neutral icon.',
+      settings.colorIcon,
+      (checked) => void patch({ colorIcon: checked }, container),
+    ),
+  ]);
+}
+
+function renderStartupSection(current: AppState, container: HTMLElement): HTMLElement {
   const { settings } = current;
   const lang = settings.language;
 
@@ -357,15 +523,7 @@ function renderAppearanceSection(current: AppState, container: HTMLElement): HTM
   );
 
   return el('section', {}, [
-    el('h2', { text: lang === 'uk' ? 'Вигляд і запуск' : 'Appearance & startup' }),
-    toggle(
-      lang === 'uk' ? 'Кольорова іконка в треї' : 'Colour-coded tray icon',
-      lang === 'uk'
-        ? 'Червона під час тривоги, зелена у спокої, жовта коли стан невідомий. Вимкніть для однотонної іконки.'
-        : 'Red during an alert, green when clear, amber when unknown. Turn off for a single neutral icon.',
-      settings.colorIcon,
-      (checked) => void patch({ colorIcon: checked }, container),
-    ),
+    el('h2', { text: lang === 'uk' ? 'Запуск' : 'Startup' }),
     toggle(
       lang === 'uk' ? 'Запускати разом із системою' : 'Launch at login',
       null,
@@ -378,7 +536,7 @@ function renderAppearanceSection(current: AppState, container: HTMLElement): HTM
       settings.startMinimized,
       (checked) => void patch({ startMinimized: checked }, container),
     ),
-    el('div', { class: 'field' }, [
+    el('div', { class: 'field', style: 'margin-top:12px' }, [
       el('label', { text: lang === 'uk' ? 'Мова' : 'Language' }),
       languageSelect,
     ]),
@@ -390,7 +548,10 @@ function renderFooter(current: AppState): HTMLElement {
   return el('footer', {}, [
     el('span', { text: `v${current.appVersion}` }),
     el('span', {
-      text: lang === 'uk' ? 'Закриття вікна залишає застосунок у треї' : 'Closing this window keeps the app in the tray',
+      text:
+        lang === 'uk'
+          ? 'Закриття вікна залишає застосунок у треї'
+          : 'Closing this window keeps the app in the tray',
     }),
   ]);
 }

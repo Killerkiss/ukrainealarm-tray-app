@@ -1,5 +1,5 @@
 import { el, on } from './dom';
-import type { Region } from '../shared/types';
+import type { Language, Region } from '../shared/types';
 
 export interface RegionPickerOptions {
   regions: Region[];
@@ -10,166 +10,174 @@ export interface RegionPickerOptions {
   error: string | null;
   query: string;
   openGroups: Set<string>;
-  language: 'uk' | 'en';
+  language: Language;
   onToggle(id: string, checked: boolean): void;
   onQueryChange(query: string): void;
   onGroupToggle(id: string, open: boolean): void;
   onClear(): void;
 }
 
-interface Group {
-  state: Region;
-  districts: Region[];
+interface Node {
+  region: Region;
+  children: Node[];
 }
 
 /**
- * Two-level oblast → raion picker.
+ * Nested oblast → raion → hromada picker.
  *
- * Selecting an oblast covers every raion inside it (the main process resolves
- * that hierarchy), so the parent checkbox is not a "select all children" bulk
- * action — it is a subscription in its own right. Children are shown as
- * indeterminate-free independent checkboxes to keep that distinction honest.
+ * Selecting a region covers everything inside it, so a parent checkbox is not a
+ * "tick all children" shortcut — it is a subscription in its own right. Whether
+ * a *parent's* alert reaches a child subscription is the separate precision
+ * setting on the Regions tab.
  */
 export function renderRegionPicker(options: RegionPickerOptions): HTMLElement {
   const container = el('div');
+  const uk = options.language === 'uk';
 
   const search = el('input', {
     type: 'search',
-    placeholder: options.language === 'uk' ? 'Пошук області або району…' : 'Search oblast or raion…',
+    placeholder: uk ? 'Пошук області, району або громади…' : 'Search oblast, raion or hromada…',
     value: options.query,
-    'aria-label': options.language === 'uk' ? 'Пошук регіону' : 'Search region',
+    'aria-label': uk ? 'Пошук регіону' : 'Search region',
   });
   on(search, 'input', () => options.onQueryChange(search.value));
 
   const clearButton = el('button', {
     type: 'button',
-    text: options.language === 'uk' ? 'Зняти все' : 'Clear all',
+    text: uk ? 'Зняти все' : 'Clear all',
     ...(options.selected.size === 0 ? { disabled: true } : {}),
   });
   on(clearButton, 'click', () => options.onClear());
 
   container.append(el('div', { class: 'region-toolbar' }, [search, clearButton]));
-  container.append(
-    el('p', {
-      class: 'selected-count',
-      text:
-        options.language === 'uk'
-          ? `Вибрано регіонів: ${options.selected.size}`
-          : `${options.selected.size} region(s) selected`,
-    }),
-  );
 
   const list = el('div', { class: 'region-list', id: 'region-list' });
 
   if (options.error) {
     list.append(el('p', { class: 'empty', text: options.error }));
   } else if (options.loading && options.regions.length === 0) {
-    list.append(el('p', { class: 'empty', text: options.language === 'uk' ? 'Завантаження…' : 'Loading…' }));
+    list.append(el('p', { class: 'empty', text: uk ? 'Завантаження…' : 'Loading…' }));
   } else {
-    const groups = filterGroups(buildGroups(options.regions), options.query);
-    if (groups.length === 0) {
-      list.append(
-        el('p', { class: 'empty', text: options.language === 'uk' ? 'Нічого не знайдено' : 'No matches' }),
-      );
+    const roots = filterNodes(buildTree(options.regions), options.query);
+    if (roots.length === 0) {
+      list.append(el('p', { class: 'empty', text: uk ? 'Нічого не знайдено' : 'No matches' }));
     }
-    for (const group of groups) {
-      list.append(renderGroup(group, options));
-    }
+    for (const node of roots) list.append(renderNode(node, options, 0));
   }
 
   container.append(list);
   return container;
 }
 
-function renderGroup(group: Group, options: RegionPickerOptions): HTMLElement {
-  const groupActive = options.active.has(group.state.id);
-  // A search hit or an alert inside the oblast should reveal its raions.
+function renderNode(node: Node, options: RegionPickerOptions, depth: number): HTMLElement {
+  const isActive = options.active.has(node.region.id);
+
+  // A leaf has nothing to expand, so it renders as a plain row.
+  if (node.children.length === 0) {
+    return renderLeaf(node.region, options, depth);
+  }
+
   const open =
-    options.openGroups.has(group.state.id) || (options.query.trim().length > 0 && group.districts.length > 0);
+    options.openGroups.has(node.region.id) || options.query.trim().length > 0;
 
   const details = el('details', {
     class: 'region-group',
-    'data-active': String(groupActive),
+    'data-active': String(isActive),
     ...(open ? { open: true } : {}),
   });
 
   const checkbox = el('input', {
     type: 'checkbox',
-    ...(options.selected.has(group.state.id) ? { checked: true } : {}),
-    'aria-label': group.state.name,
+    ...(options.selected.has(node.region.id) ? { checked: true } : {}),
+    'aria-label': node.region.name,
   });
-  on(checkbox, 'change', () => options.onToggle(group.state.id, checkbox.checked));
+  on(checkbox, 'change', () => options.onToggle(node.region.id, checkbox.checked));
   // The checkbox lives inside <summary>, whose default click toggles the
   // <details>; stop that so ticking a box does not also collapse the group.
   on(checkbox, 'click', (event) => event.stopPropagation());
 
-  const summary = el('summary', {}, [
-    checkbox,
-    el('span', { class: 'name', text: group.state.name }),
-    groupActive && el('span', { class: 'badge', text: options.language === 'uk' ? 'тривога' : 'alert' }),
-  ]);
-  details.append(summary);
+  details.append(
+    el('summary', { style: depth > 0 ? `padding-left:${10 + depth * 16}px` : false }, [
+      checkbox,
+      el('span', { class: 'name', text: node.region.name }),
+      isActive
+        ? el('span', { class: 'badge', text: options.language === 'uk' ? 'тривога' : 'alert' })
+        : null,
+    ]),
+  );
 
-  on(details, 'toggle', () => options.onGroupToggle(group.state.id, details.open));
+  on(details, 'toggle', () => options.onGroupToggle(node.region.id, details.open));
 
-  if (group.districts.length > 0) {
-    const children = el('div', { class: 'region-children' });
-    for (const district of group.districts) {
-      children.append(renderDistrict(district, options));
-    }
-    details.append(children);
-  }
+  const children = el('div', {
+    class: 'region-children',
+    style: `padding-left:${34 + depth * 16}px`,
+  });
+  for (const child of node.children) children.append(renderNode(child, options, depth + 1));
+  details.append(children);
 
   return details;
 }
 
-function renderDistrict(district: Region, options: RegionPickerOptions): HTMLElement {
+function renderLeaf(region: Region, options: RegionPickerOptions, depth: number): HTMLElement {
   const checkbox = el('input', {
     type: 'checkbox',
-    ...(options.selected.has(district.id) ? { checked: true } : {}),
+    ...(options.selected.has(region.id) ? { checked: true } : {}),
   });
-  on(checkbox, 'change', () => options.onToggle(district.id, checkbox.checked));
+  on(checkbox, 'change', () => options.onToggle(region.id, checkbox.checked));
 
-  const isActive = options.active.has(district.id);
-  return el('label', { class: 'region-row', 'data-active': String(isActive) }, [
-    checkbox,
-    el('span', { class: 'name', text: district.name }),
-    isActive && el('span', { class: 'badge', text: options.language === 'uk' ? 'тривога' : 'alert' }),
-  ]);
+  const isActive = options.active.has(region.id);
+  return el(
+    'label',
+    {
+      class: 'region-row',
+      'data-active': String(isActive),
+      style: depth > 1 ? `padding-left:${(depth - 1) * 16}px` : false,
+    },
+    [
+      checkbox,
+      el('span', { class: 'name', text: region.name }),
+      // Only the official API knows hromadas; say so rather than let the user
+      // wonder why a city vanished when they turned that source off.
+      region.sources.length === 1 && region.sources[0] === 'ukrainealarm'
+        ? el('span', { class: 'source-tag', text: 'api' })
+        : null,
+      isActive
+        ? el('span', { class: 'badge', text: options.language === 'uk' ? 'тривога' : 'alert' })
+        : null,
+    ],
+  );
 }
 
-function buildGroups(regions: Region[]): Group[] {
-  const groups = new Map<string, Group>();
+/** Builds the region forest from the flat list, at any depth. */
+function buildTree(regions: Region[]): Node[] {
+  const nodes = new Map<string, Node>();
+  for (const region of regions) nodes.set(region.id, { region, children: [] });
 
-  for (const region of regions) {
-    if (region.level === 'state') {
-      const existing = groups.get(region.id);
-      if (existing) existing.state = region;
-      else groups.set(region.id, { state: region, districts: [] });
-    }
+  const roots: Node[] = [];
+  for (const node of nodes.values()) {
+    const parent = node.region.parentId ? nodes.get(node.region.parentId) : undefined;
+    if (parent) parent.children.push(node);
+    else roots.push(node);
   }
-
-  for (const region of regions) {
-    if (region.level !== 'district' || !region.parentId) continue;
-    groups.get(region.parentId)?.districts.push(region);
-  }
-
-  return [...groups.values()];
+  return roots;
 }
 
-/** Keeps an oblast when it matches, or narrows it to its matching raions. */
-function filterGroups(groups: Group[], query: string): Group[] {
+/**
+ * Keeps a node when it matches, or narrows it to its matching descendants, so a
+ * search for a city surfaces it with its oblast and raion still around it.
+ */
+function filterNodes(nodes: Node[], query: string): Node[] {
   const needle = query.trim().toLowerCase();
-  if (!needle) return groups;
+  if (!needle) return nodes;
 
-  const result: Group[] = [];
-  for (const group of groups) {
-    if (group.state.name.toLowerCase().includes(needle)) {
-      result.push(group);
+  const result: Node[] = [];
+  for (const node of nodes) {
+    if (node.region.name.toLowerCase().includes(needle)) {
+      result.push(node);
       continue;
     }
-    const districts = group.districts.filter((d) => d.name.toLowerCase().includes(needle));
-    if (districts.length > 0) result.push({ state: group.state, districts });
+    const children = filterNodes(node.children, query);
+    if (children.length > 0) result.push({ region: node.region, children });
   }
   return result;
 }

@@ -1,3 +1,4 @@
+import { regionKey } from '../../shared/regionKey';
 import type { ActiveAlert, AlertType, Region } from '../../shared/types';
 import { fetchJson, ProviderError, type AlertProvider } from './provider';
 
@@ -34,9 +35,14 @@ interface ApiAlertRegion {
  * hromada-level precision that the free mirror cannot provide.
  */
 export class UkraineAlarmProvider implements AlertProvider {
-  readonly id = 'ukrainealarm';
+  readonly id = 'ukrainealarm' as const;
   readonly label = 'api.ukrainealarm.com (official, API key required)';
   readonly requiresApiKey = true;
+
+  /** Numeric API region id -> canonical key, filled by {@link fetchRegions}. */
+  private readonly keyById = new Map<string, string>();
+  /** Canonical key -> display name, for alerts whose region we already know. */
+  private readonly nameByKey = new Map<string, string>();
 
   constructor(private readonly apiKey: string) {}
 
@@ -47,18 +53,30 @@ export class UkraineAlarmProvider implements AlertProvider {
       throw new ProviderError('The API returned an empty region list');
     }
 
+    // Numeric API ids are kept only to translate alerts; the canonical key is
+    // what the rest of the app and the other sources agree on.
+    this.keyById.clear();
+
     const regions: Region[] = [];
     for (const state of states) {
       if (!state.regionId || !state.regionName) continue;
-      regions.push({ id: state.regionId, name: state.regionName, level: 'state' });
+      const stateKey = regionKey('state', state.regionName);
+      this.keyById.set(state.regionId, stateKey);
+      this.nameByKey.set(stateKey, state.regionName);
+      regions.push({ id: stateKey, name: state.regionName, level: 'state', sources: [this.id] });
 
       for (const child of state.regionChildIds ?? []) {
         if (!child.regionId || !child.regionName) continue;
+        const level = childLevel(child.regionType);
+        const childKey = regionKey(level, child.regionName, stateKey);
+        this.keyById.set(child.regionId, childKey);
+        this.nameByKey.set(childKey, `${child.regionName}, ${state.regionName}`);
         regions.push({
-          id: child.regionId,
+          id: childKey,
           name: child.regionName,
-          level: 'district',
-          parentId: state.regionId,
+          level,
+          parentId: stateKey,
+          sources: [this.id],
         });
       }
     }
@@ -77,13 +95,19 @@ export class UkraineAlarmProvider implements AlertProvider {
       for (const active of region.activeAlerts ?? []) {
         // An entry may describe a hromada inside the parent oblast, in which
         // case the inner regionId is the one the user may have subscribed to.
-        const id = active.regionId ?? region.regionId;
-        if (!id) continue;
+        const apiId = active.regionId ?? region.regionId;
+        if (!apiId) continue;
+
+        // An alert for a region missing from /regions cannot be placed in the
+        // hierarchy, so it is skipped rather than given a bogus key.
+        const key = this.keyById.get(apiId);
+        if (!key) continue;
 
         const alert: ActiveAlert = {
-          regionId: id,
-          regionName: region.regionName ?? id,
+          regionId: key,
+          regionName: this.nameByKey.get(key) ?? region.regionName ?? key,
           type: mapAlertType(active.type),
+          sources: [this.id],
         };
         if (active.lastUpdate) alert.since = active.lastUpdate;
         alerts.push(alert);
@@ -100,6 +124,11 @@ export class UkraineAlarmProvider implements AlertProvider {
       headers: { Authorization: this.apiKey.trim() },
     });
   }
+}
+
+/** The API nests hromadas under oblasts; anything else is treated as a raion. */
+function childLevel(regionType: string | undefined): 'district' | 'community' {
+  return (regionType ?? '').toLowerCase() === 'community' ? 'community' : 'district';
 }
 
 function mapAlertType(raw: string | undefined): AlertType {

@@ -25,6 +25,38 @@ const STRINGS = {
     alertEnded: 'Відбій тривоги',
     never: 'ще не оновлювалось',
     durationNow: 'щойно',
+
+    tabRegions: 'Регіони',
+    tabSources: 'Джерела',
+    tabAlerts: 'Сповіщення',
+    tabAppearance: 'Вигляд',
+
+    regionPicker: 'Вибір регіонів',
+    selectedRegions: 'Вибрано',
+    noneSelected: 'Поки нічого не вибрано. Позначте область, район або громаду ліворуч.',
+    remove: 'Прибрати',
+
+    precision: 'Точність',
+    matchParent: 'Сповіщати про тривоги по всій області',
+    matchParentHint:
+      'Увімкнено: тривога по всій області стосується і вас. Вимкніть, щоб отримувати сповіщення лише коли тривога саме у вашому районі чи місті.',
+    strictNotice:
+      'Суворий режим: тривоги рівня області ігноруються. Більшість тривог в Україні оголошують саме по області, тож сповіщень стане значно менше.',
+
+    sources: 'Джерела даних',
+    sourcesHint:
+      'Можна увімкнути обидва. Тривога спрацює щойно про неї повідомить будь-яке джерело.',
+    sourceFree: 'Публічне дзеркало',
+    sourceFreeHint: 'Без ключа. Рівень області та району.',
+    sourceOfficial: 'api.ukrainealarm.com',
+    sourceOfficialHint: 'Потрібен безкоштовний ключ. Типи загроз і точність до громади.',
+    health: 'Стан джерел',
+    healthOk: 'працює',
+    healthFail: 'помилка',
+    healthWaiting: 'очікування',
+    alertsReported: 'тривог по країні',
+    needOneSource: 'Має бути увімкнене хоча б одне джерело.',
+    coverage: 'Покриття',
   },
   en: {
     appName: 'Ukraine Alarm',
@@ -46,6 +78,38 @@ const STRINGS = {
     alertEnded: 'All clear',
     never: 'never',
     durationNow: 'just now',
+
+    tabRegions: 'Regions',
+    tabSources: 'Sources',
+    tabAlerts: 'Notifications',
+    tabAppearance: 'Appearance',
+
+    regionPicker: 'Pick regions',
+    selectedRegions: 'Selected',
+    noneSelected: 'Nothing selected yet. Tick an oblast, raion or hromada on the left.',
+    remove: 'Remove',
+
+    precision: 'Precision',
+    matchParent: 'Alert on oblast-wide alerts',
+    matchParentHint:
+      'On: an alert covering the whole oblast counts for you. Turn it off to be notified only when the alert is for your own raion or city.',
+    strictNotice:
+      'Strict mode: oblast-level alerts are ignored. Most Ukrainian alerts are declared oblast-wide, so you will get far fewer notifications.',
+
+    sources: 'Data sources',
+    sourcesHint:
+      'Both can be enabled. An alert fires as soon as the first source reports it.',
+    sourceFree: 'Public mirror',
+    sourceFreeHint: 'No key needed. Oblast and raion level.',
+    sourceOfficial: 'api.ukrainealarm.com',
+    sourceOfficialHint: 'Needs a free key. Threat types and hromada-level precision.',
+    health: 'Source health',
+    healthOk: 'working',
+    healthFail: 'failed',
+    healthWaiting: 'waiting',
+    alertsReported: 'alerts countrywide',
+    needOneSource: 'At least one source must stay enabled.',
+    coverage: 'Coverage',
   },
 } as const;
 

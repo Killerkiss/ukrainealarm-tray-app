@@ -37,9 +37,9 @@ export class SettingsWindow {
     if (this.window && !this.window.isDestroyed()) return this.window;
 
     const window = new BrowserWindow({
-      width: 560,
-      height: 760,
-      minWidth: 460,
+      width: 940,
+      height: 720,
+      minWidth: 640,
       minHeight: 560,
       show: false,
       title: 'Ukraine Alarm',

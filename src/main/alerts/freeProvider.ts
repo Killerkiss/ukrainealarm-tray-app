@@ -1,3 +1,4 @@
+import { regionKey } from '../../shared/regionKey';
 import type { ActiveAlert, Region } from '../../shared/types';
 import { fetchJson, ProviderError, type AlertProvider } from './provider';
 
@@ -17,11 +18,11 @@ interface MirrorResponse {
  * Free, key-less source. It mirrors the public alert map at oblast and raion
  * level and reports no threat type, so every alert is reported as `air_raid`.
  *
- * Region ids are derived from the Ukrainian place names the mirror uses, since
- * it exposes no numeric ids: `free:<oblast>` and `free:<oblast>/<raion>`.
+ * It has no city/hromada level at all — that granularity needs the official
+ * API.
  */
 export class FreeMirrorProvider implements AlertProvider {
-  readonly id = 'free';
+  readonly id = 'free' as const;
   readonly label = 'Public alert map mirror (no API key)';
   readonly requiresApiKey = false;
 
@@ -30,15 +31,21 @@ export class FreeMirrorProvider implements AlertProvider {
     const regions: Region[] = [];
 
     for (const [stateName, state] of Object.entries(states)) {
-      const stateId = regionId(stateName);
-      regions.push({ id: stateId, name: stateName, level: 'state' });
+      const stateKey = regionKey('state', stateName);
+      regions.push({
+        id: stateKey,
+        name: stateName,
+        level: 'state',
+        sources: [this.id],
+      });
 
       for (const districtName of Object.keys(state.districts ?? {})) {
         regions.push({
-          id: regionId(stateName, districtName),
+          id: regionKey('district', districtName, stateKey),
           name: districtName,
           level: 'district',
-          parentId: stateId,
+          parentId: stateKey,
+          sources: [this.id],
         });
       }
     }
@@ -51,20 +58,36 @@ export class FreeMirrorProvider implements AlertProvider {
     const alerts: ActiveAlert[] = [];
 
     for (const [stateName, state] of Object.entries(states)) {
+      const stateKey = regionKey('state', stateName);
       if (state.enabled) {
-        alerts.push(toAlert(regionId(stateName), stateName, state));
+        alerts.push(this.toAlert(stateKey, stateName, state));
       }
 
       for (const [districtName, district] of Object.entries(state.districts ?? {})) {
         if (district.enabled) {
           alerts.push(
-            toAlert(regionId(stateName, districtName), `${districtName}, ${stateName}`, district),
+            this.toAlert(
+              regionKey('district', districtName, stateKey),
+              `${districtName}, ${stateName}`,
+              district,
+            ),
           );
         }
       }
     }
 
     return alerts;
+  }
+
+  private toAlert(id: string, name: string, node: MirrorNode): ActiveAlert {
+    const alert: ActiveAlert = {
+      regionId: id,
+      regionName: name,
+      type: 'air_raid',
+      sources: [this.id],
+    };
+    if (node.enabled_at) alert.since = node.enabled_at;
+    return alert;
   }
 
   private async fetchStates(signal: AbortSignal): Promise<Record<string, MirrorNode>> {
@@ -74,14 +97,4 @@ export class FreeMirrorProvider implements AlertProvider {
     }
     return body.states;
   }
-}
-
-function toAlert(id: string, name: string, node: MirrorNode): ActiveAlert {
-  const alert: ActiveAlert = { regionId: id, regionName: name, type: 'air_raid' };
-  if (node.enabled_at) alert.since = node.enabled_at;
-  return alert;
-}
-
-function regionId(state: string, district?: string): string {
-  return district ? `free:${state}/${district}` : `free:${state}`;
 }
