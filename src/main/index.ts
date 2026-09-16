@@ -3,6 +3,7 @@ import { IPC } from '../shared/ipc';
 import type { AppState, Settings } from '../shared/types';
 import { AlertPoller } from './alerts/poller';
 import { Notifier } from './notifier';
+import { setAutostart } from './autostart';
 import { SettingsStore, sanitize } from './settingsStore';
 import { SettingsWindow, markQuitting } from './settingsWindow';
 import { SoundPlayer } from './soundPlayer';
@@ -133,12 +134,7 @@ function registerIpc(ctx: IpcContext): void {
 }
 
 function applyLaunchAtLogin(settings: Settings): void {
-  // Unsupported on some Linux desktops; never let it break startup.
-  try {
-    app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, openAsHidden: true });
-  } catch (error) {
-    console.error('Could not update the launch-at-login setting', error);
-  }
+  setAutostart(settings.launchAtLogin);
 }
 
 function tryParseUrl(url: string): URL | null {

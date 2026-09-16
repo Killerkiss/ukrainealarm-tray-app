@@ -81,12 +81,27 @@ removal — delete that directory too for a clean uninstall.
 Useful for a machine where you would rather not install anything system-wide:
 
 ```bash
-chmod +x ukrainealarm-tray-0.1.0-x86_64.AppImage
-./ukrainealarm-tray-0.1.0-x86_64.AppImage
+chmod +x ukrainealarm-tray-0.4.0-x86_64.AppImage
+./ukrainealarm-tray-0.4.0-x86_64.AppImage
 ```
 
 The AppImage is self-contained, so it does not create a menu entry by itself. If you want
 one, [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) will add it.
+
+**Put it somewhere permanent first** — `~/Applications/`, not `~/Downloads`. *Launch at login*
+records the AppImage's current path, so moving, renaming or deleting the file afterwards breaks
+autostart. The app notices a stale entry and reports launch-at-login as off, so you can just
+switch it on again from its new location.
+
+### Which one should I use?
+
+The **`.deb`**, unless you cannot install packages on that machine. It puts the app at a fixed
+path, registers a menu entry and icon, lets apt handle the dependencies, and upgrades cleanly by
+installing a newer `.deb` over the top — so *Launch at login* keeps working across upgrades.
+
+The AppImage is the right choice for a locked-down or borrowed machine, and its only real cost
+is that you manage the file yourself: no menu entry, manual updates, and autostart tied to
+wherever you keep it.
 
 ### If the tray icon does not appear
 
@@ -206,6 +221,16 @@ same detail lines into the top of the tray context menu — one click instead of
 
 You may also need an indicator extension for the tray icon to appear on GNOME
 (e.g. AppIndicator and KStatusNotifierItem Support).
+
+### Launch at login
+
+Turn it on in Settings → Appearance & startup. On Linux the app writes an XDG autostart entry
+to `~/.config/autostart/ukrainealarm-tray-app.desktop` itself, because Electron's
+`setLoginItemSettings` is a no-op there — it neither throws nor takes effect, so relying on it
+produced a toggle that silently did nothing (fixed in v0.4.1).
+
+The entry includes `X-GNOME-Autostart-Delay=5` so the tray indicator area exists before the app
+starts.
 
 ### macOS
 
