@@ -1,4 +1,4 @@
-import type { AlertType, Language, ThreatType } from './types';
+import type { AlertLevel, AlertType, Language, ThreatType } from './types';
 
 /**
  * Small hand-rolled dictionary. The app is Ukrainian-first: `uk` is the default
@@ -13,7 +13,6 @@ const STRINGS = {
     muteFor: 'Приглушити звук',
     muted: 'Звук приглушено',
     unmute: 'Увімкнути звук',
-    statusAlert: 'ПОВІТРЯНА ТРИВОГА',
     statusClear: 'Відбій — тривоги немає',
     statusUnknown: 'Стан невідомий',
     noRegions: 'Регіон не вибрано — відкрийте налаштування',
@@ -55,6 +54,13 @@ const STRINGS = {
       'Потрібен безкоштовний токен. Єдине джерело, що вказує саме тип загрози: дрони, балістика, крилаті ракети, КАБи.',
     alertsOnly: 'Лише тривоги — не надає список регіонів. Тримайте увімкненим ще одне джерело.',
     threats: 'Загрози',
+    levelRed: 'червоний рівень',
+    levelYellow: 'жовтий рівень',
+    levelUnknown: 'рівень не вказано',
+    statusAlertRed: 'ПОВІТРЯНА ТРИВОГА',
+    statusAlertYellow: 'ЗАГРОЗА (жовтий рівень)',
+    startedAt: 'початок',
+    timezoneNote: 'Час показано за',
     health: 'Стан джерел',
     healthOk: 'працює',
     healthFail: 'помилка',
@@ -71,7 +77,6 @@ const STRINGS = {
     muteFor: 'Mute sound',
     muted: 'Sound muted',
     unmute: 'Unmute sound',
-    statusAlert: 'AIR RAID ALERT',
     statusClear: 'All clear — no alert',
     statusUnknown: 'Status unknown',
     noRegions: 'No region selected — open Settings',
@@ -113,6 +118,13 @@ const STRINGS = {
       'Needs a free token. The only source that names the actual threat: drones, ballistic, cruise missiles, guided bombs.',
     alertsOnly: 'Alerts only — publishes no region list. Keep another source enabled.',
     threats: 'Threats',
+    levelRed: 'red level',
+    levelYellow: 'yellow level',
+    levelUnknown: 'level not reported',
+    statusAlertRed: 'AIR RAID ALERT',
+    statusAlertYellow: 'THREAT (yellow level)',
+    startedAt: 'started',
+    timezoneNote: 'Times shown in',
     health: 'Source health',
     healthOk: 'working',
     healthFail: 'failed',
@@ -179,6 +191,12 @@ const THREAT_LABELS: Record<Language, Record<ThreatType, string>> = {
   },
 };
 
+export function alertLevelLabel(language: Language, level: AlertLevel): string {
+  if (level === 'red') return t(language, 'levelRed');
+  if (level === 'yellow') return t(language, 'levelYellow');
+  return t(language, 'levelUnknown');
+}
+
 export function threatLabel(language: Language, threat: ThreatType): string {
   return THREAT_LABELS[language][threat];
 }
@@ -216,9 +234,44 @@ export function formatDuration(language: Language, fromIso: string, now = Date.n
   return `${minutes} ${m}`;
 }
 
+/**
+ * Absolute start time in the viewer's own timezone, e.g. `16.09.2026, 14:32`.
+ *
+ * Duration alone ("2 h 14 min") cannot be cross-checked against anything else
+ * the user sees — a news post, a message, another app — so the wall-clock time
+ * is shown as well.
+ */
+export function formatDateTime(language: Language, iso: string | null): string {
+  if (!iso) return t(language, 'never');
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return t(language, 'never');
+
+  // No `timeZone` option: the system zone is exactly what the user wants.
+  return date.toLocaleString(locale(language), {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** The IANA zone the times above are rendered in, e.g. `Europe/Kyiv`. */
+export function localTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+function locale(language: Language): string {
+  return language === 'uk' ? 'uk-UA' : 'en-GB';
+}
+
 export function formatTime(language: Language, iso: string | null): string {
   if (!iso) return t(language, 'never');
-  return new Date(iso).toLocaleTimeString(language === 'uk' ? 'uk-UA' : 'en-GB', {
+  return new Date(iso).toLocaleTimeString(locale(language), {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',

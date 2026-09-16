@@ -1,5 +1,6 @@
 import { Notification } from 'electron';
-import { alertTypeLabel, t, threatSummary } from '../shared/i18n';
+import { alertLevelLabel, alertTypeLabel, t, threatSummary } from '../shared/i18n';
+import { worstLevel } from '../shared/alertLevel';
 import type { ActiveAlert, Settings } from '../shared/types';
 import type { AlertTransition } from './alerts/poller';
 import { appIcon } from './trayIcon';
@@ -47,12 +48,19 @@ export class Notifier {
     }
 
     if (wantsNotification && Notification.isSupported()) {
-      const title = t(settings.language, kind === 'alert' ? 'alertStarted' : 'alertEnded');
+      const level = worstLevel(alerts.map((alert) => alert.level));
+      const title =
+        kind === 'clear'
+          ? t(settings.language, 'alertEnded')
+          : t(settings.language, level === 'yellow' ? 'statusAlertYellow' : 'alertStarted');
+
       new Notification({
         title,
         body: describeAlerts(alerts, settings, kind),
         icon: appIcon(),
-        urgency: kind === 'alert' ? 'critical' : 'normal',
+        // A yellow-level threat should not demand the same attention as a
+        // declared raid, which on most desktops stays on screen until dismissed.
+        urgency: kind === 'alert' && level !== 'yellow' ? 'critical' : 'normal',
         silent: true, // The app plays its own sound; avoid a doubled chime.
       }).show();
     }
@@ -61,7 +69,11 @@ export class Notifier {
 
 function describeAlerts(alerts: ActiveAlert[], settings: Settings, kind: 'alert' | 'clear'): string {
   const lines = alerts.slice(0, 4).map((alert) => {
-    const type = kind === 'alert' ? `${alertTypeLabel(settings.language, alert.type)}: ` : '';
+    const level =
+      kind === 'alert' && alert.level !== 'unknown'
+        ? ` (${alertLevelLabel(settings.language, alert.level)})`
+        : '';
+    const type = kind === 'alert' ? `${alertTypeLabel(settings.language, alert.type)}${level}: ` : '';
     // "drones" or "ballistic missiles" is the part worth reading first.
     const threats = kind === 'alert' ? threatSummary(settings.language, alert.threats) : '';
     const detail = threats ? ` — ${threats}` : '';

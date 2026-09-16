@@ -1,3 +1,4 @@
+import { mergeLevels } from '../../shared/alertLevel';
 import type { ActiveAlert, ProviderId, Region, Settings, SourceStatus } from '../../shared/types';
 import { AlertsInUaProvider } from './alertsInUaProvider';
 import { FreeMirrorProvider } from './freeProvider';
@@ -160,6 +161,7 @@ function mergeAlerts(results: SourceResult[]): ActiveAlert[] {
         if (!existing.sources.includes(source)) existing.sources.push(source);
       }
       if (isEarlier(alert.since, existing.since)) existing.since = alert.since;
+      existing.level = mergeLevels(existing.level, alert.level);
 
       // Only alerts.in.ua breaks an alert down into drones/missiles/bombs, so
       // that detail must survive the merge with a source that lacks it.

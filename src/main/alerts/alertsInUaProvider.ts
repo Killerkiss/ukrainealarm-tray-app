@@ -1,3 +1,4 @@
+import { parseAlertLevel } from '../../shared/alertLevel';
 import { regionKey } from '../../shared/regionKey';
 import type { ActiveAlert, AlertType, Region, ThreatType } from '../../shared/types';
 import { ProviderError, type AlertProvider } from './provider';
@@ -15,6 +16,7 @@ interface ApiAlert {
   location_oblast?: string;
   location_raion?: string;
   alert_type?: string;
+  alert_level?: string | null;
   started_at?: string;
   finished_at?: string | null;
   notes?: string;
@@ -125,6 +127,7 @@ export class AlertsInUaProvider implements AlertProvider {
       regionId: id,
       regionName: displayName(raw),
       type: mapAlertType(raw.alert_type),
+      level: parseAlertLevel(raw.alert_level),
       sources: [this.id],
     };
 

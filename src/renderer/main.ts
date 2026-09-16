@@ -1,7 +1,10 @@
 import {
+  alertLevelLabel,
   alertTypeLabel,
+  formatDateTime,
   formatDuration,
   formatTime,
+  localTimeZone,
   t,
   threatSummary,
   type StringKey,
@@ -152,12 +155,17 @@ function renderStatus(current: AppState): HTMLElement {
     settings.regions.length === 0
       ? t(lang, 'noRegions')
       : snapshot.status === 'alert'
-        ? t(lang, 'statusAlert')
+        ? t(lang, snapshot.level === 'yellow' ? 'statusAlertYellow' : 'statusAlertRed')
         : snapshot.status === 'clear'
           ? t(lang, 'statusClear')
           : t(lang, 'statusUnknown');
 
-  const section = el('div', { class: 'status', 'data-status': snapshot.status }, [
+  const section = el('div', {
+    class: 'status',
+    'data-status': snapshot.status,
+    // Drives the banner colour: a yellow threat must not look like a red raid.
+    'data-level': snapshot.level ?? 'none',
+  }, [
     el('p', { class: 'status-headline', text: headline }),
     el('p', {
       class: 'status-meta',
@@ -169,17 +177,25 @@ function renderStatus(current: AppState): HTMLElement {
     const list = el('ul', { class: 'status-list' });
     for (const alert of snapshot.alerts) {
       list.append(
-        el('li', {}, [
+        el('li', { 'data-level': alert.level }, [
+          alert.level === 'unknown'
+            ? null
+            : el('span', {
+                class: 'level-badge',
+                'data-level': alert.level,
+                text: alertLevelLabel(lang, alert.level),
+              }),
           el('span', { class: 'region', text: alert.regionName }),
           ' — ',
           alertTypeLabel(lang, alert.type),
+          // Wall-clock start first, elapsed time after: one can be checked
+          // against other sources, the other is read at a glance.
           alert.since
             ? el('span', {
                 class: 'elapsed',
-                text: ` (${t(lang, 'since')} ${formatDuration(lang, alert.since)})`,
+                text: ` · ${t(lang, 'startedAt')} ${formatDateTime(lang, alert.since)} (${formatDuration(lang, alert.since)})`,
               })
             : null,
-          // Which feed saw it matters when two sources disagree.
           el('span', { class: 'source-tag', text: alert.sources.join(' + ') }),
           // Only alerts.in.ua says what is actually inbound.
           alert.threats?.length
@@ -564,7 +580,7 @@ function renderStartupSection(current: AppState, container: HTMLElement): HTMLEl
 function renderFooter(current: AppState): HTMLElement {
   const lang = current.settings.language;
   return el('footer', {}, [
-    el('span', { text: `v${current.appVersion}` }),
+    el('span', { text: `v${current.appVersion} · ${t(lang, 'timezoneNote')} ${localTimeZone()}` }),
     el('span', {
       text:
         lang === 'uk'

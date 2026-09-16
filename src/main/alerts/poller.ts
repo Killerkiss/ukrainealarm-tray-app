@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { ActiveAlert, AlertSnapshot, Region, Settings } from '../../shared/types';
+import { worstLevel } from '../../shared/alertLevel';
 import { ProviderAggregator, type Logger } from './aggregator';
 import { alertConcernsUser, buildRegionIndex, type RegionIndex } from './regionMatching';
 
@@ -11,6 +12,7 @@ export interface AlertTransition {
 
 const EMPTY_SNAPSHOT: AlertSnapshot = {
   status: 'unknown',
+  level: null,
   alerts: [],
   countrywideCount: 0,
   sources: [],
@@ -172,6 +174,7 @@ export class AlertPoller extends EventEmitter {
 
     const snapshot: AlertSnapshot = {
       status: selected.size === 0 ? 'unknown' : relevant.length > 0 ? 'alert' : 'clear',
+      level: worstLevel(relevant.map((alert) => alert.level)),
       alerts: relevant,
       countrywideCount: all.length,
       sources: result.sources,

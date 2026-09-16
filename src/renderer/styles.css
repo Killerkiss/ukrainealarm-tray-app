@@ -8,7 +8,9 @@
   --accent: #4d8dff;
   --alert: #e5383b;
   --clear: #2f9e44;
-  --unknown: #f08c00;
+  --unknown: #868e96;
+  --warn: #f59f00;
+  --warn-text: #b06f00;
   --radius: 10px;
 }
 
@@ -20,6 +22,13 @@
     --border: #d5d9e2;
     --text: #1a1d23;
     --text-dim: #5d6473;
+  }
+}
+
+/* Amber on a dark panel needs to stay bright to remain legible. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --warn-text: #ffc94d;
   }
 }
 
@@ -225,6 +234,16 @@ body {
   background: color-mix(in srgb, var(--alert) 12%, var(--panel));
 }
 
+/* A yellow-level threat is a warning, not a declared raid. */
+.status[data-status='alert'][data-level='yellow'] {
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, var(--panel));
+}
+
+.status[data-status='alert'][data-level='yellow'] .status-headline {
+  color: var(--warn-text);
+}
+
 .status[data-status='clear'] {
   border-left-color: var(--clear);
 }
@@ -267,6 +286,27 @@ body {
 
 .status-list .elapsed {
   color: var(--text-dim);
+}
+
+.level-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-right: 7px;
+  white-space: nowrap;
+}
+
+.level-badge[data-level='red'] {
+  background: var(--alert);
+}
+
+.level-badge[data-level='yellow'] {
+  background: var(--warn);
+  color: #3d2c00;
 }
 
 .status-error {

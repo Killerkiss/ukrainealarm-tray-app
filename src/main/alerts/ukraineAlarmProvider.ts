@@ -107,6 +107,8 @@ export class UkraineAlarmProvider implements AlertProvider {
           regionId: key,
           regionName: this.nameByKey.get(key) ?? region.regionName ?? key,
           type: mapAlertType(active.type),
+          // The v3 schema carries no severity, so it must not be guessed.
+          level: 'unknown',
           sources: [this.id],
         };
         if (active.lastUpdate) alert.since = active.lastUpdate;

@@ -38,6 +38,7 @@ export interface ActiveAlert {
   regionId: string;
   regionName: string;
   type: AlertType;
+  level: AlertLevel;
   /** ISO timestamp of when the alert started, when a source reports it. */
   since?: string;
   /** Sources that are currently reporting this alert. */
@@ -50,6 +51,16 @@ export interface ActiveAlert {
   /** Free-text note from the source, e.g. who declared the alert. */
   notes?: string;
 }
+
+/**
+ * Severity of an alert.
+ *
+ * `yellow` is a preliminary threat (something is heading this way), `red` is a
+ * declared air-raid alert. `unknown` means the source does not report a level —
+ * it is never treated as less severe than `red`, so severity is never
+ * understated.
+ */
+export type AlertLevel = 'red' | 'yellow' | 'unknown';
 
 /** Threat breakdown reported by alerts.in.ua alongside an alert. */
 export type ThreatType =
@@ -80,6 +91,8 @@ export type AlertStatus = 'alert' | 'clear' | 'unknown';
 /** A full snapshot of the world, recomputed on every poll. */
 export interface AlertSnapshot {
   status: AlertStatus;
+  /** Most severe level among the user's active alerts; null when none. */
+  level: AlertLevel | null;
   /** Alerts limited to the user's selected regions. Empty when `status !== 'alert'`. */
   alerts: ActiveAlert[];
   /** Every alert currently active in the country, for the "all regions" view. */

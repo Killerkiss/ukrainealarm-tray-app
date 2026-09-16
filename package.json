@@ -1,7 +1,7 @@
 {
   "name": "ukrainealarm-tray-app",
   "productName": "Ukraine Alarm Tray",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Cross-platform tray app for Ukrainian air-raid (drone/missile) alerts, with per-region selection, notifications, sound and colour-coded tray icon.",
   "license": "MIT",
   "author": {

@@ -1,3 +1,4 @@
+import { parseAlertLevel } from '../../shared/alertLevel';
 import { regionKey } from '../../shared/regionKey';
 import type { ActiveAlert, Region } from '../../shared/types';
 import { fetchJson, ProviderError, type AlertProvider } from './provider';
@@ -7,6 +8,7 @@ const STATUSES_URL = 'https://vadimklimenko.com/map/statuses.json';
 interface MirrorNode {
   enabled?: boolean;
   enabled_at?: string | null;
+  alert_level?: string | null;
   districts?: Record<string, MirrorNode>;
 }
 
@@ -84,6 +86,7 @@ export class FreeMirrorProvider implements AlertProvider {
       regionId: id,
       regionName: name,
       type: 'air_raid',
+      level: parseAlertLevel(node.alert_level),
       sources: [this.id],
     };
     if (node.enabled_at) alert.since = node.enabled_at;

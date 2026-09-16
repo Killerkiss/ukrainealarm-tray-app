@@ -1,5 +1,14 @@
 import { Menu, Tray, type MenuItemConstructorOptions } from 'electron';
-import { alertTypeLabel, formatDuration, formatTime, t, threatSummary } from '../shared/i18n';
+import {
+  alertLevelLabel,
+  alertTypeLabel,
+  formatDateTime,
+  formatDuration,
+  formatTime,
+  localTimeZone,
+  t,
+  threatSummary,
+} from '../shared/i18n';
 import type { AlertSnapshot, Settings } from '../shared/types';
 import { iconFor } from './trayIcon';
 
@@ -31,7 +40,7 @@ export class TrayController {
     private snapshot: AlertSnapshot,
     private readonly actions: TrayActions,
   ) {
-    this.tray = new Tray(iconFor(snapshot.status, settings.colorIcon));
+    this.tray = new Tray(iconFor(snapshot.status, snapshot.level, settings.colorIcon));
     this.tray.on('click', () => this.actions.openSettings());
     this.tray.on('double-click', () => this.actions.openSettings());
     this.render();
@@ -48,7 +57,7 @@ export class TrayController {
   }
 
   private render(): void {
-    this.tray.setImage(iconFor(this.snapshot.status, this.settings.colorIcon));
+    this.tray.setImage(iconFor(this.snapshot.status, this.snapshot.level, this.settings.colorIcon));
     this.tray.setToolTip(this.tooltip());
     this.tray.setContextMenu(Menu.buildFromTemplate(this.menu()));
   }
@@ -63,7 +72,9 @@ export class TrayController {
     if (this.snapshot.error) {
       lines.push(`${t(language, 'error')}: ${this.snapshot.error}`);
     }
-    lines.push(`${t(language, 'lastUpdated')}: ${formatTime(language, this.snapshot.lastUpdated)}`);
+    lines.push(
+      `${t(language, 'lastUpdated')}: ${formatTime(language, this.snapshot.lastUpdated)} · ${t(language, 'timezoneNote')} ${localTimeZone()}`,
+    );
     return lines.join('\n');
   }
 
@@ -73,7 +84,8 @@ export class TrayController {
 
     switch (this.snapshot.status) {
       case 'alert':
-        return t(language, 'statusAlert');
+        // A yellow-level threat is not the same message as a declared raid.
+        return t(language, this.snapshot.level === 'yellow' ? 'statusAlertYellow' : 'statusAlertRed');
       case 'clear':
         return t(language, 'statusClear');
       default:
@@ -89,12 +101,16 @@ export class TrayController {
 
     const lines = alerts.slice(0, MAX_DETAIL_LINES).map((alert) => {
       const type = alertTypeLabel(language, alert.type);
-      const elapsed = alert.since ? ` (${t(language, 'since')} ${formatDuration(language, alert.since)})` : '';
-      // Naming the feed matters when only one of two sources sees an alert.
+      const level = alert.level === 'unknown' ? '' : ` (${alertLevelLabel(language, alert.level)})`;
+      // Both the wall-clock start and how long it has run: one is checkable
+      // against other sources, the other is read at a glance.
+      const started = alert.since
+        ? ` — ${t(language, 'startedAt')} ${formatDateTime(language, alert.since)}, ${formatDuration(language, alert.since)}`
+        : '';
       const from = alert.sources.length > 0 ? ` [${alert.sources.join('+')}]` : '';
       const threats = threatSummary(language, alert.threats);
       const detail = threats ? ` — ${threats}` : '';
-      return `• ${type} — ${alert.regionName}${detail}${elapsed}${from}`;
+      return `• ${type}${level} — ${alert.regionName}${detail}${started}${from}`;
     });
 
     const remaining = alerts.length - lines.length;

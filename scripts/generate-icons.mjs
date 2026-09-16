@@ -15,10 +15,16 @@ import { encodePng } from './png.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'assets', 'icons');
 
+/**
+ * One colour per tray state. `unknown` is deliberately grey rather than amber:
+ * amber now means a yellow-level alert, and "no data" must not look like a
+ * live threat.
+ */
 const STATES = {
   alert: '#e5383b',
+  warn: '#f59f00',
   clear: '#2f9e44',
-  unknown: '#f08c00',
+  unknown: '#868e96',
   mono: '#9aa0a6',
 };
 

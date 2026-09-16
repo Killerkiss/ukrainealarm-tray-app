@@ -18,8 +18,17 @@ glance — red during an alert, green when clear. Hover for the details.
   does not hide what the others can see. A health panel shows each feed's live state.
 - **Knows what is inbound.** With alerts.in.ua enabled, the tray, notifications and window name
   the actual threat — drones, ballistic or cruise missiles, guided bombs — not just "air raid".
-- **Colour-coded tray icon** — red on alert, green when clear, amber when the status is
-  unknown. Switchable to a single neutral icon if you would rather it never change.
+- **Red and yellow alert levels.** Ukraine declares two severities — yellow is a preliminary
+  threat, red is a declared air-raid alert — and the app keeps them apart everywhere: the tray
+  icon, the headline, the per-alert badge and the notification. A yellow threat also gets
+  normal notification urgency instead of the critical urgency that makes a notification stick
+  on screen until dismissed.
+- **Colour-coded tray icon** — red on a red-level alert, amber on yellow, green when clear,
+  grey when the status is unknown. Switchable to a single neutral icon if you would rather it
+  never change.
+- **Exact start times in your own timezone**, alongside the elapsed duration: `started
+  16.09.2026, 09:14 (50 min)`. The duration is quick to read; the wall-clock time is what you
+  can check against a news post or a message from someone else.
 - **Hover details.** The tooltip lists every active alert: threat type, region, and how long
   it has been running. The same lines are mirrored into the tray menu (see
   [Linux tooltips](#linux-tooltips)).
@@ -92,6 +101,7 @@ npm run package:linux  # writes .deb and .AppImage into release/
 | Credential | none | free API key | free app token |
 | Granularity | oblast, raion | oblast, raion, hromada | oblast, raion, hromada, city |
 | Alert types | air raid only | air raid, artillery, urban fighting, chemical, nuclear | same, plus `alert_level` |
+| Alert level | **red / yellow** | not reported | **red / yellow** |
 | **Threat detail** | — | — | **drones, ballistic, cruise missiles, guided bombs, MiG-31K…** |
 | Region list | yes | yes | **no — alerts only** |
 
@@ -159,6 +169,17 @@ CI checks that the committed assets match what the scripts produce.
 Context isolation is on, Node integration is off, and the renderer talks to the main process
 through six explicit IPC channels. Settings arriving over IPC are re-validated in the main
 process rather than trusted, and only `http(s)` URLs are ever handed to the OS handler.
+
+## How severity is decided
+
+A source that does not report a level (api.ukrainealarm.com) yields `unknown`, which is ranked
+**as severe as red**, never as mild as yellow — an alert without a stated level is still a real
+alert, and the tray must not understate it.
+
+When two sources describe the same alert, a source that actually reports a level beats one that
+does not, so a `yellow` from alerts.in.ua is not silently promoted to red just because another
+feed also saw it. Between two known levels, the more severe wins. See
+[`src/shared/alertLevel.ts`](src/shared/alertLevel.ts).
 
 ## Platform notes
 
